@@ -235,28 +235,28 @@ def render_sci_gif(bundle, name, a, b=0, out="viz/fly_solve.gif", W=560, H=396,
     read = np.array(bundle["read"]); motor = np.array(bundle["motor"])
     e_pre = np.array(bundle["edges"]["pre"]); e_post = np.array(bundle["edges"]["post"]); e_w = np.array(bundle["edges"]["w"], dtype=np.float32)
     op = bundle["ops"][name]; tr = bundle["trunk"]
-    u = np.zeros(N, dtype=np.float32)
-    for si, dg in enumerate([a // 10, a % 10]):
-        u[slots[si][dg]] += gain
-    in_neurons = set(np.concatenate([slots[0][a // 10], slots[1][a % 10]]).tolist())
+    def digs(v):
+        return [v // 100, (v // 10) % 10, v % 10]
+    u = np.zeros(N, dtype=np.float32); in_neurons = set()
+    for si, dg in enumerate(digs(a)):
+        u[slots[si][dg]] += gain; in_neurons |= set(slots[si][dg].tolist())
     if op["arity"] == 2:
-        for si, dg in enumerate([b // 10, b % 10]):
-            u[slots[2 + si][dg]] += gain
-        in_neurons |= set(np.concatenate([slots[2][b // 10], slots[3][b % 10]]).tolist())
+        for si, dg in enumerate(digs(b)):
+            u[slots[3 + si][dg]] += gain; in_neurons |= set(slots[3 + si][dg].tolist())
     x = np.zeros(N, dtype=np.float32); R = []
     for t in range(steps):
         r = np.tanh(x); rec = np.zeros(N, dtype=np.float32); np.add.at(rec, e_post, e_w * r[e_pre])
         x = (1 - alpha) * x + alpha * (rec + u); R.append(np.tanh(x))
     R = np.array(R)
     feat = np.concatenate([R[steps - rwin:][:, read].mean(0), [1.0]]).astype(np.float32)
-    if op.get("dedicated"):
-        mm = bundle["mul_mlp"]
+    if op["kind"] == "trunk":
+        z = np.maximum(0, np.array(tr["W2"]) @ np.maximum(0, np.array(tr["W1"]) @ feat + np.array(tr["b1"])) + np.array(tr["b2"]))
+        o = np.array(op["W"]) @ z + np.array(op["hb"])
+    else:
+        mm = op["mlp"]
         h1 = np.maximum(0, np.array(mm["W1"]) @ feat + np.array(mm["b1"]))
         h2 = np.maximum(0, np.array(mm["W2"]) @ h1 + np.array(mm["b2"]))
         o = np.array(mm["W3"]) @ h2 + np.array(mm["b3"])
-    else:
-        z = np.maximum(0, np.array(tr["W2"]) @ np.maximum(0, np.array(tr["W1"]) @ feat + np.array(tr["b1"])) + np.array(tr["b2"]))
-        o = np.array(op["W"]) @ z + np.array(op["hb"])
     K = op["K"]; mag = sum(int(o[d * 10:d * 10 + 10].argmax()) * (10 ** i) for i, d in enumerate(range(K)))
     val = mag / (10 ** op["dec"])
     if op["signed"] and o[K * 10 + 1] > o[K * 10]:
