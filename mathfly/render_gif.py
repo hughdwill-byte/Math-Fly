@@ -249,8 +249,14 @@ def render_sci_gif(bundle, name, a, b=0, out="viz/fly_solve.gif", W=560, H=396,
         x = (1 - alpha) * x + alpha * (rec + u); R.append(np.tanh(x))
     R = np.array(R)
     feat = np.concatenate([R[steps - rwin:][:, read].mean(0), [1.0]]).astype(np.float32)
-    z = np.maximum(0, np.array(tr["W2"]) @ np.maximum(0, np.array(tr["W1"]) @ feat + np.array(tr["b1"])) + np.array(tr["b2"]))
-    o = np.array(op["W"]) @ z + np.array(op["hb"])
+    if op.get("dedicated"):
+        mm = bundle["mul_mlp"]
+        h1 = np.maximum(0, np.array(mm["W1"]) @ feat + np.array(mm["b1"]))
+        h2 = np.maximum(0, np.array(mm["W2"]) @ h1 + np.array(mm["b2"]))
+        o = np.array(mm["W3"]) @ h2 + np.array(mm["b3"])
+    else:
+        z = np.maximum(0, np.array(tr["W2"]) @ np.maximum(0, np.array(tr["W1"]) @ feat + np.array(tr["b1"])) + np.array(tr["b2"]))
+        o = np.array(op["W"]) @ z + np.array(op["hb"])
     K = op["K"]; mag = sum(int(o[d * 10:d * 10 + 10].argmax()) * (10 ** i) for i, d in enumerate(range(K)))
     val = mag / (10 ** op["dec"])
     if op["signed"] and o[K * 10 + 1] > o[K * 10]:

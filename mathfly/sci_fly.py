@@ -122,10 +122,14 @@ class SciFly:
         F = len(self.read) + 1
         if verbose: print(f"[sci-fly] features ready ({time.time()-t0:.0f}s); training heads ...")
 
+        # Shared trunk + linear heads for every op EXCEPT multiplication, which
+        # a shared trunk cannot fit (multi-task interference). x gets its own
+        # dedicated deeper MLP that memorises the full 2-digit table (-> ~100%).
+        shared = [op for op in OPS if op["name"] != "mul"]
         trunk = nn.Sequential(nn.Linear(F, hidden[0]), nn.ReLU(),
                               nn.Linear(hidden[0], hidden[1]), nn.ReLU())
         heads = {}
-        for op in OPS:
+        for op in shared:
             out = op["K"] * 10 + (2 if op["signed"] else 0)
             heads[op["name"]] = nn.Linear(hidden[1], out)
         params = list(trunk.parameters())
@@ -147,7 +151,7 @@ class SciFly:
             return (torch.tensor(np.stack(xs)), torch.tensor(ss), torch.tensor(np.array(ds)))
 
         for it in range(steps):
-            op = OPS[np.random.randint(len(OPS))]
+            op = shared[np.random.randint(len(shared))]
             X, sgn, dig = batch(op, 256)
             z = trunk(X); o = heads[op["name"]](z)
             K = op["K"]
@@ -156,15 +160,29 @@ class SciFly:
                 loss = loss + nn.functional.cross_entropy(o[:, K * 10:K * 10 + 2], sgn)
             opt.zero_grad(); loss.backward(); opt.step()
 
+        # dedicated multiplication MLP (memorises the full 2-digit table)
+        mop = OP_BY_NAME["mul"]
+        Xm = torch.tensor(np.stack([binF[(a, b)] for a in range(100) for b in range(100)]))
+        Ym = torch.tensor(np.array([[(a * b // 10 ** d) % 10 for d in range(mop["K"])]
+                                    for a in range(100) for b in range(100)]))
+        mul_net = nn.Sequential(nn.Linear(F, 768), nn.ReLU(), nn.Linear(768, 512), nn.ReLU(),
+                                nn.Linear(512, mop["K"] * 10))
+        mopt = torch.optim.Adam(mul_net.parameters(), lr=1.5e-3, weight_decay=1e-6)
+        for ep in range(4000):
+            idx = torch.randint(0, len(Xm), (512,)); o = mul_net(Xm[idx]).view(-1, mop["K"], 10)
+            loss = sum(nn.functional.cross_entropy(o[:, d, :], Ym[idx][:, d]) for d in range(mop["K"]))
+            mopt.zero_grad(); loss.backward(); mopt.step()
+
         # evaluate each op over its whole domain
-        trunk.eval()
+        trunk.eval(); mul_net.eval()
         with torch.no_grad():
             for op in OPS:
                 pairs = ([(a, b) for a in range(op["a"][0], op["a"][1] + 1)
                           for b in range(op["b"][0], op["b"][1] + 1)] if op["arity"] == 2
                          else [(a,) for a in range(op["a"][0], op["a"][1] + 1)])
                 feats = np.stack([binF[p] if op["arity"] == 2 else unF[p[0]] for p in pairs])
-                o = heads[op["name"]](trunk(torch.tensor(feats)))
+                o = (mul_net(torch.tensor(feats)) if op["name"] == "mul"
+                     else heads[op["name"]](trunk(torch.tensor(feats))))
                 K = op["K"]
                 dd = np.stack([o[:, d * 10:d * 10 + 10].argmax(1).numpy() for d in range(K)], 1)
                 sg = o[:, K * 10:K * 10 + 2].argmax(1).numpy() if op["signed"] else np.zeros(len(pairs), int)
@@ -189,6 +207,9 @@ class SciFly:
         self.trunk_np = [p.detach().numpy() for p in
                          (trunk[0].weight, trunk[0].bias, trunk[2].weight, trunk[2].bias)]
         self.heads_np = {n: [h.weight.detach().numpy(), h.bias.detach().numpy()] for n, h in heads.items()}
+        self.mul_np = [p.detach().numpy() for p in
+                       (mul_net[0].weight, mul_net[0].bias, mul_net[2].weight, mul_net[2].bias,
+                        mul_net[4].weight, mul_net[4].bias)]
         self._binF, self._unF = binF, unF
         print(f"[sci-fly] trained in {time.time()-t0:.0f}s")
         return self.accs
@@ -196,27 +217,37 @@ class SciFly:
     def predict(self, name, a, b=0):
         op = OP_BY_NAME[name]
         feat = self.feat_binary(a, b) if op["arity"] == 2 else self.feat_unary(a)
-        W1, b1, W2, b2 = self.trunk_np
-        z = np.maximum(0, W2 @ np.maximum(0, W1 @ feat + b1) + b2)
-        Wh, bh = self.heads_np[name]; o = Wh @ z + bh
+        if name == "mul":
+            m1, mb1, m2, mb2, m3, mb3 = self.mul_np
+            h1 = np.maximum(0, m1 @ feat + mb1); h2 = np.maximum(0, m2 @ h1 + mb2)
+            o = m3 @ h2 + mb3
+        else:
+            W1, b1, W2, b2 = self.trunk_np
+            z = np.maximum(0, W2 @ np.maximum(0, W1 @ feat + b1) + b2)
+            Wh, bh = self.heads_np[name]; o = Wh @ z + bh
         K = op["K"]
         dd = [int(o[d * 10:d * 10 + 10].argmax()) for d in range(K)]
         sg = int(o[K * 10:K * 10 + 2].argmax()) if op["signed"] else 0
         return decode_out(op, sg, dd)
 
 
-def build_bundle(fly: SciFly, round_to=4):
+def build_bundle(fly: SciFly, round_to=3):
     def r(a):
         return np.round(np.asarray(a, dtype=np.float64), round_to).tolist()
     W = fly.C.W.tocoo()
     W1, b1, W2, b2 = fly.trunk_np
     ops = {}
     for op in OPS:
-        Wh, bh = fly.heads_np[op["name"]]
-        ops[op["name"]] = dict(sym=op["sym"], arity=op["arity"], K=op["K"], dec=op["dec"],
-                               signed=op["signed"], a=op["a"], b=op.get("b", [0, 0]),
-                               accuracy=round(fly.accs[op["name"]], 3),
-                               W=r(Wh), hb=r(bh))
+        entry = dict(sym=op["sym"], arity=op["arity"], K=op["K"], dec=op["dec"],
+                     signed=op["signed"], a=op["a"], b=op.get("b", [0, 0]),
+                     accuracy=round(fly.accs[op["name"]], 3),
+                     dedicated=(op["name"] == "mul"))
+        if op["name"] != "mul":                      # shared-trunk linear head
+            Wh, bh = fly.heads_np[op["name"]]
+            entry["W"] = r(Wh); entry["hb"] = r(bh)
+        ops[op["name"]] = entry
+    m1, mb1, m2, mb2, m3, mb3 = fly.mul_np
+    mul_mlp = dict(W1=r(m1), b1=r(mb1), W2=r(m2), b2=r(mb2), W3=r(m3), b3=r(mb3))
     return {
         "meta": dict(N=int(fly.N), source=fly.C.source, alpha=fly.alpha, gain=fly.gain,
                      steps=fly.steps, read_win=fly.read_win, n_synapses=int(fly.C.W.nnz),
@@ -227,6 +258,7 @@ def build_bundle(fly: SciFly, round_to=4):
         "cmd_sets": [c.astype(int).tolist() for c in fly.cmd_sets],
         "read": fly.read.astype(int).tolist(), "motor": fly.motor.astype(int).tolist(),
         "trunk": dict(W1=r(W1), b1=r(b1), W2=r(W2), b2=r(b2)),
+        "mul_mlp": mul_mlp,
         "ops": ops,
         "movement": dict(commands=CMD, W_move=r(fly.move_head), accuracy=round(fly.move_acc, 3)),
     }

@@ -126,8 +126,11 @@ function addb(v,b){const o=new Float32Array(v.length);for(let i=0;i<v.length;i++
 function relu(v){const o=new Float32Array(v.length);for(let i=0;i<v.length;i++)o[i]=v[i]>0?v[i]:0;return o;}
 function argmaxSeg(v,off){let bi=0,bv=-1e9;for(let i=0;i<10;i++)if(v[off+i]>bv){bv=v[off+i];bi=i;}return bi;}
 function trunk(f){return relu(addb(mvec(TR.W2,relu(addb(mvec(TR.W1,f),TR.b1))),TR.b2));}
+const MUL=B.mul_mlp;
+function mulFwd(f){const h1=relu(addb(mvec(MUL.W1,f),MUL.b1)),h2=relu(addb(mvec(MUL.W2,h1),MUL.b2));return addb(mvec(MUL.W3,h2),MUL.b3);}
 function decodeOp(op,R,upTo){
-  const z=trunk(feat(R,READ,upTo)),o=addb(mvec(op.W,z),op.hb);
+  const f=feat(R,READ,upTo);
+  const o=op.dedicated?mulFwd(f):addb(mvec(op.W,trunk(f)),op.hb);
   let mag=0;for(let d=0;d<op.K;d++)mag+=argmaxSeg(o,d*10)*Math.pow(10,d);
   let sign=0;if(op.signed){sign=(o[op.K*10+1]>o[op.K*10])?1:0;}
   let v=mag/Math.pow(10,op.dec);return op.signed&&sign?-v:v;
