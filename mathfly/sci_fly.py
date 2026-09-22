@@ -147,7 +147,7 @@ class SciFly:
 
         # ---- dedicated MLPs for the binary ops ----
         def train_mlp(op, feats_map, pairs, deep, iters):
-            hidden = (768, 512) if deep else (512, 256)
+            hidden = (512, 320) if deep else (448, 224)   # sized to keep the bundle < 16 MB
             layers = [nn.Linear(F, hidden[0]), nn.ReLU(), nn.Linear(hidden[0], hidden[1]), nn.ReLU(),
                       nn.Linear(hidden[1], op["K"] * 10 + (2 if op["signed"] else 0))]
             net = nn.Sequential(*layers)
