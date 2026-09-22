@@ -213,10 +213,11 @@ viz/
   sci_fly_template.html    the scientific-calculator UI (anatomy, expressions, movement)
   calc_fly_template.html   the single-digit calculator-fly player
   fly_viz_template.html    the earlier token-stream player
-  fly_viz.html             generated standalone visualiser (open in a browser)
+  fly_viz.html             local build output (git-ignored; regenerate any time)
   fly_solve.gif            generated animation of a solve
-docs/index.html            the visualiser, served by GitHub Pages (kept in sync)
-.github/workflows/pages.yml   auto-deploys docs/ to GitHub Pages
+index.html                 the calculator, served at the GitHub Pages site root
+docs/index.html            same page, for Pages set to the /docs folder
+.github/workflows/pages.yml   auto-deploys to GitHub Pages
 configs/           quickstart, full_connectome, digits, bptt, rl (.yaml)
 tests/             pytest smoke tests (9, all green)
 GUIDE.md           ← full training guide (start here)

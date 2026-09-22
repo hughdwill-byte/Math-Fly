@@ -30,3 +30,6 @@ venv/
 .DS_Store
 .vscode/
 .idea/
+
+# Generated web build (served copies live at index.html and docs/index.html)
+viz/fly_viz.html

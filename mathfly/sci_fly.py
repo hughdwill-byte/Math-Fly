@@ -278,11 +278,13 @@ def main():
             json.dump(bundle, f, separators=(",", ":"))
     tpl = os.path.join(os.path.dirname(__file__), "..", "viz", "sci_fly_template.html")
     build_html(bundle, tpl, args.out)
-    # keep the GitHub Pages copy in sync
+    # keep the GitHub Pages copies in sync (root + docs both serve the page)
     import shutil
-    if os.path.isdir("docs"):
-        shutil.copyfile(args.out, "docs/index.html")
-        print("[sci-fly] copied -> docs/index.html (GitHub Pages)")
+    for dest in ["index.html", os.path.join("docs", "index.html")]:
+        d = os.path.dirname(dest)
+        if not d or os.path.isdir(d):
+            shutil.copyfile(args.out, dest)
+            print(f"[sci-fly] copied -> {dest}")
 
 
 if __name__ == "__main__":
