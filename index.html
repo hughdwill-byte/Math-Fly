@@ -140,7 +140,8 @@ function fmt(op,v){return op&&op.dec>0?(+v).toFixed(op.dec):String(Math.round(v)
 
 // ---------- anatomical canvas (letterboxed, aspect preserved) ----------
 const cv=$("brain"),ctx=cv.getContext("2d");let CW,CH,PTS=[],edgeCanvas=null,BOX=null,trailCanvas=null,trailCtx=null;
-function layout(){const dpr=Math.min(2,devicePixelRatio||1),r=cv.parentElement.getBoundingClientRect();
+const MAXDPR=1.5;   // cap the device-pixel-ratio: retina screens otherwise fill 4x the pixels every frame for no visible gain
+function layout(){const dpr=Math.min(MAXDPR,devicePixelRatio||1),r=cv.parentElement.getBoundingClientRect();
   CW=r.width;CH=Math.max(560,r.height);cv.width=CW*dpr;cv.height=CH*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
   trailCanvas=document.createElement("canvas");trailCanvas.width=CW*dpr;trailCanvas.height=CH*dpr;
   trailCtx=trailCanvas.getContext("2d");trailCtx.setTransform(dpr,0,0,dpr,0,0);
@@ -148,21 +149,32 @@ function layout(){const dpr=Math.min(2,devicePixelRatio||1),r=cv.parentElement.g
   const pad=30,s=Math.min((CW-2*pad)/(x1-x0),(CH-2*pad)/(y1-y0)),ox=(CW-(x1-x0)*s)/2,oy=(CH-(y1-y0)*s)/2;
   PTS=POS.map(p=>[ox+(p[0]-x0)*s,oy+(p[1]-y0)*s]);
   BOX={x0:ox,y0:oy,x1:ox+(x1-x0)*s,y1:oy+(y1-y0)*s};drawEdges();}
-function drawEdges(){const dpr=Math.min(2,devicePixelRatio||1);edgeCanvas=document.createElement("canvas");
+function drawEdges(){const dpr=Math.min(MAXDPR,devicePixelRatio||1);edgeCanvas=document.createElement("canvas");
   edgeCanvas.width=CW*dpr;edgeCanvas.height=CH*dpr;const ec=edgeCanvas.getContext("2d");ec.setTransform(dpr,0,0,dpr,0,0);ec.lineWidth=0.5;
   const st=Math.max(1,Math.floor(NE/7000));for(let k=0;k<NE;k+=st){const A=PTS[E_PRE[k]],Bp=PTS[E_POST[k]];
     ec.strokeStyle=E_W[k]<0?"rgba(255,95,141,0.05)":"rgba(55,224,198,0.05)";ec.beginPath();ec.moveTo(A[0],A[1]);ec.lineTo(Bp[0],Bp[1]);ec.stroke();}
   // faint region labels
   ec.fillStyle="rgba(139,160,194,0.28)";ec.font="11px 'JetBrains Mono',monospace";ec.textAlign="center";
   ec.fillText("B R A I N",(BOX.x0+BOX.x1)/2,BOX.y0+14);
-  ec.fillText("N E R V E   C O R D",(BOX.x0+BOX.x1)/2,BOX.y1-6);}
+  ec.fillText("N E R V E   C O R D",(BOX.x0+BOX.x1)/2,BOX.y1-6);
+  // motor-neuron rings never move -> bake them into the static layer instead of re-stroking ~2,000 arcs every frame
+  ec.strokeStyle="rgba(138,180,255,.3)";ec.lineWidth=1;
+  for(const i of MOTOR){const p=PTS[i];ec.beginPath();ec.arc(p[0],p[1],2,0,6.2832);ec.stroke();}}
 // strongest synapses -> candidate sparks (signal visibly travelling on wires)
 let SPARK=[];function pickSparks(){SPARK=[...Array(NE).keys()].sort((p,q)=>Math.abs(E_W[q])-Math.abs(E_W[p])).slice(0,2600);}
-const DPR=()=>Math.min(2,devicePixelRatio||1);
+const DPR=()=>Math.min(MAXDPR,devicePixelRatio||1);
+// pre-rendered soft "glow dot" sprites, one per E/I colour. Drawing a cached sprite
+// per neuron is ~10x cheaper than an arc + shadowBlur, and shadowBlur was the main
+// thing that stalled weaker machines when the heartbeat lit thousands of neurons at once.
+function makeGlow(rgb){const s=48,c=document.createElement("canvas");c.width=c.height=s;const g=c.getContext("2d");
+  const grd=g.createRadialGradient(s/2,s/2,0,s/2,s/2,s/2);
+  grd.addColorStop(0,`rgba(${rgb},1)`);grd.addColorStop(0.28,`rgba(${rgb},0.55)`);grd.addColorStop(1,`rgba(${rgb},0)`);
+  g.fillStyle=grd;g.fillRect(0,0,s,s);return c;}
+const GLOW=[makeGlow("55,224,198"),makeGlow("255,95,141")];
 function paint(act,showInputs,R,frame){ctx.clearRect(0,0,CW,CH);
   if(edgeCanvas)ctx.drawImage(edgeCanvas,0,0,edgeCanvas.width/DPR(),edgeCanvas.height/DPR());
-  // --- signal sparks travel on a fading trail layer, so they leave streaks on the wires ---
-  if(FX&&trailCtx){
+  // --- signal sparks travel on a fading trail layer, so they leave streaks on the wires (only during a solve) ---
+  if(FX&&trailCtx&&R){
     trailCtx.globalCompositeOperation="destination-out";           // fade existing trail toward transparent
     trailCtx.fillStyle="rgba(0,0,0,0.12)";trailCtx.fillRect(0,0,CW,CH);
     if(R){trailCtx.globalCompositeOperation="lighter";const src=R[Math.max(0,frame-1)],ph=(clock*0.05)%1;
@@ -172,14 +184,13 @@ function paint(act,showInputs,R,frame){ctx.clearRect(0,0,CW,CH);
         trailCtx.fillStyle=`rgba(${col},${al})`;trailCtx.beginPath();trailCtx.arc(x,y,1.1+a*1.7,0,6.2832);trailCtx.fill();}}
     ctx.globalCompositeOperation="lighter";ctx.drawImage(trailCanvas,0,0,trailCanvas.width/DPR(),trailCanvas.height/DPR());
   }
-  // --- neurons ---
+  // --- neurons: additive cached glow sprites (no per-neuron shadowBlur) ---
   ctx.globalCompositeOperation="lighter";
-  for(let i=0;i<N;i++){const a=act(i),base=SIGN[i]>=0?[55,224,198]:[255,95,141],p=PTS[i],rad=1.1+a*4.6,al=0.07+a*0.95;
-    if(a>0.22){ctx.shadowBlur=6+a*20;ctx.shadowColor=`rgba(${base[0]},${base[1]},${base[2]},${al})`;}else ctx.shadowBlur=0;
-    ctx.fillStyle=`rgba(${base[0]},${base[1]},${base[2]},${al})`;ctx.beginPath();ctx.arc(p[0],p[1],rad,0,6.2832);ctx.fill();}
-  ctx.shadowBlur=0;ctx.globalCompositeOperation="source-over";
-  if(showInputs&&A.inputSets){ctx.strokeStyle="rgba(255,206,84,.75)";ctx.lineWidth=1.6;for(const set of A.inputSets)for(const n of set){const p=PTS[n];ctx.beginPath();ctx.arc(p[0],p[1],3.6,0,6.2832);ctx.stroke();}}
-  ctx.strokeStyle="rgba(138,180,255,.3)";ctx.lineWidth=1;for(const i of MOTOR){const p=PTS[i];ctx.beginPath();ctx.arc(p[0],p[1],2,0,6.2832);ctx.stroke();}}
+  for(let i=0;i<N;i++){const a=act(i);if(a<0.02)continue;                 // skip near-dark neurons entirely
+    const p=PTS[i],g=GLOW[SIGN[i]>=0?0:1],rad=2.2+a*10;
+    ctx.globalAlpha=a<1?0.1+a*0.9:1;ctx.drawImage(g,p[0]-rad,p[1]-rad,rad*2,rad*2);}
+  ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";
+  if(showInputs&&A.inputSets){ctx.strokeStyle="rgba(255,206,84,.75)";ctx.lineWidth=1.6;for(const set of A.inputSets)for(const n of set){const p=PTS[n];ctx.beginPath();ctx.arc(p[0],p[1],3.6,0,6.2832);ctx.stroke();}}}
 // idle "alive" state: a slow spatial shimmer, modulated by a lub-dub heartbeat so the whole brain pulses
 function heartbeat(){const x=(clock%78)/78,g=(c,w)=>Math.exp(-((x-c)*(x-c))/(w*w));return g(0.06,0.045)+0.65*g(0.20,0.05);}
 function ambientAct(i){const p=POS[i],w=Math.max(0,Math.sin(p[1]*7-clock*0.028)*Math.cos(p[0]*6+clock*0.019));
@@ -192,15 +203,26 @@ let FX=true,staticDrawn=false;
 const A={R:null,frame:0,inputSets:null,onDone:null,adv:1};
 let tc=0,_lastR=null,clock=0;const SPEED=3;
 function runAnim(R,inputSets,label,onDone,quick){A.R=R;A.frame=0;A.inputSets=inputSets;A.onDone=onDone;A.adv=quick?3:1;_lastR=R;
+  if(trailCtx)trailCtx.clearRect(0,0,CW,CH);   // start each solve with a clean trail
   $("step").innerHTML=label;}
-function loop(){clock++;
+// The loop is frame-rate capped (idle 30fps, solving 40fps) and pauses entirely when the
+// tab is hidden or the brain is scrolled off-screen, so it never pegs a CPU in the background.
+let _last=0,paused=false;
+function loop(ts){requestAnimationFrame(loop);
+  if(paused)return;
+  const minDt=1000/(A.R?40:30);if(ts-_last<minDt)return;_last=ts;
+  clock++;
   if(A.R){staticDrawn=false;const f=Math.min(A.frame,STEPS-1);paint(i=>Math.abs(A.R[f][i]),true,A.R,f);
     if(A.frame>=STEPS-1){const cb=A.onDone;A.onDone=null;A.R=null;if(cb)cb();}
     else{tc++;if(tc>=SPEED){tc=0;A.frame+=A.adv;}}}
   else if(FX)paint(ambientAct,false,null,0);         // idle shimmer + heartbeat
   else if(!staticDrawn){paint(calmAct,false,null,0);staticDrawn=true;}   // calm view: draw once, then hold
-  requestAnimationFrame(loop);}
+}
 function lastR(){return _lastR;}
+// pause when the page is hidden or the canvas is scrolled out of view
+let _vis=true,_onscr=true;function updPause(){paused=!_vis||!_onscr;if(!paused)staticDrawn=false;}
+document.addEventListener("visibilitychange",()=>{_vis=!document.hidden;updPause();});
+try{new IntersectionObserver(es=>{_onscr=es[0].isIntersecting;updPause();},{threshold:0}).observe(cv);}catch(e){}
 
 // ---------- expression parsing (shunting-yard, precedence) ----------
 function tokenize(str){str=str.replace(/[−]/g,"-").replace(/[×]/g,"*").replace(/[÷]/g,"/");const t=[];let i=0;
