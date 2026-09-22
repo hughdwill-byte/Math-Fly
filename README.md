@@ -41,7 +41,31 @@ Expected output (a synthetic stand-in connectome, so you can develop offline):
 
 ## Watch it think 🧠
 
-![The real male-CNS fly computing 6 × 7 = 42](viz/fly_solve.gif)
+![The real male-CNS fly computing 7 × 8 = 56 as a scientific calculator](viz/fly_solve.gif)
+
+### Scientific-calculator fly — the real fly as a pocket calculator (0–99)
+
+```bash
+python scripts/download_male_cns.py --max-neurons 5000
+python -m mathfly.sci_fly --out viz/fly_viz.html      # + - x /, x², √, sin, cos, log, 1/x
+```
+
+Trained over the whole 0–99 domain, the real 5,000-neuron fly behaves like a
+pocket scientific calculator — measured per operation:
+
+| op | acc | | op | acc |
+|----|-----|-|----|-----|
+| `+` | 100% | | `x²` | 100% |
+| `−` | 100% | | `√`  | 100% |
+| `×` | 100% | | `sin`| 100% |
+| `÷` | 99%  | | `cos`| 100% |
+| `1/x` | 99% | | `log`| 100% |
+
+…plus **movement 100%** on its ~2,000 real motor neurons. Transcendental
+functions are decoded to 3 decimals (finite precision, like any calculator).
+Two design notes kept it honest: `+ −` genuinely *generalise* (95%+ on held-out
+pairs before full-domain training), and `×` needed its own dedicated head — a
+shared readout can't fit multiplication next to the other operations.
 
 Export a **standalone, interactive web page** where you type a problem and watch
 the fly's neurons fire as it solves it — teal for excitatory, rose for
@@ -157,6 +181,7 @@ mathfly/
   evaluate.py      accuracy + sample predictions
   male_cns.py      build a trainable subgraph from the REAL male-CNS connectome
   calc_fly.py      the calculator fly: real connectome -> 100% single-digit maths
+  sci_fly.py       the scientific-calculator fly: + - x /, x², √, sin, cos, log, 1/x
   movement.py      basic-movement skill read from the fly's real motor neurons
   synapse_train.py train the synapses (backprop-through-time) on the real fly
   export_web.py    export a trained model to the interactive visualiser
@@ -168,7 +193,8 @@ scripts/
 data/connectome/
   male_cns_subgraph.npz    the cached REAL fly subgraph (committed, ~0.1 MB)
 viz/
-  calc_fly_template.html   the calculator-fly player (real fly, maths + movement)
+  sci_fly_template.html    the scientific-calculator UI (keypad + functions + movement)
+  calc_fly_template.html   the single-digit calculator-fly player
   fly_viz_template.html    the earlier token-stream player
   fly_viz.html             generated standalone visualiser (open in a browser)
   fly_solve.gif            generated animation of a solve
