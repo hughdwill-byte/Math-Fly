@@ -146,8 +146,7 @@ class SciFly:
         self._trunk = trunk; self._lin = lin
 
         # ---- dedicated MLPs for the binary ops ----
-        def train_mlp(op, feats_map, pairs, deep, iters):
-            hidden = (512, 320) if deep else (448, 224)   # sized to keep the bundle < 16 MB
+        def train_mlp(op, feats_map, pairs, hidden, iters):
             layers = [nn.Linear(F, hidden[0]), nn.ReLU(), nn.Linear(hidden[0], hidden[1]), nn.ReLU(),
                       nn.Linear(hidden[1], op["K"] * 10 + (2 if op["signed"] else 0))]
             net = nn.Sequential(*layers)
@@ -168,10 +167,12 @@ class SciFly:
         gen_list = list(genF.keys())
         for op in OPS:
             if op["kind"] == "gen":
-                nets[op["name"]] = train_mlp(op, genF, gen_list, deep=False, iters=1600)
+                nets[op["name"]] = train_mlp(op, genF, gen_list, hidden=(448, 224), iters=1600)
             elif op["kind"] == "memo":
                 pairs = [(a, b) for a in range(op["a"][0], op["a"][1] + 1) for b in range(op["b"][0], op["b"][1] + 1)]
-                nets[op["name"]] = train_mlp(op, memoF, pairs, deep=True, iters=4000)
+                # multiplication needs the most capacity to memorise its full table
+                hidden = (768, 512) if op["name"] == "mul" else (448, 256)
+                nets[op["name"]] = train_mlp(op, memoF, pairs, hidden=hidden, iters=5000)
         self._nets = nets
         self.mlp_np = {n: [q.detach().numpy() for q in (net[0].weight, net[0].bias, net[2].weight, net[2].bias, net[4].weight, net[4].bias)]
                        for n, net in nets.items()}
