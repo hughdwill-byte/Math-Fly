@@ -70,28 +70,34 @@ python -m mathfly.train --mode reservoir --config configs/full_connectome.yaml
 3. **I/O** (`mathfly/io_encoding.py`). Numbers enter as timed input pulses on a
    set of "sensory" neurons (place code + magnitude code); the answer is read
    from a set of "motor" neurons.
-4. **Training** (`mathfly/train.py`). Two regimes:
-   - **Reservoir** (default, NumPy, CPU): freeze the connectome, train one
+4. **Training** (`mathfly/train.py`). Four regimes via `--mode`:
+   - **`reservoir`** (default, NumPy, CPU): freeze the connectome, train one
      linear readout head per task via ridge regression. Fast and always works.
-   - **BPTT** (optional, PyTorch): keep the connectome's sign + sparsity fixed
-     but learn a per-edge gain + I/O by backprop-through-time. Stronger, needs
-     more compute.
+   - **`digits`** (NumPy): decode the answer **digit-by-digit** (one 10-way head
+     per position) so answer size no longer caps the math — the key to big /
+     multi-digit results.
+   - **`bptt`** (PyTorch): keep the connectome's sign + sparsity fixed but learn
+     a per-edge gain + I/O by backprop-through-time. Stronger, needs compute.
+   - **`rl`** (PyTorch + Gymnasium): drop the network into `MathFlyEnv` and train
+     it from **reward only** with REINFORCE — the "agent in a world" framing.
 
 ## Layout
 
 ```
 mathfly/
   connectome.py    load male-CNS CSVs (or synthetic fallback) -> signed sparse W
-  io_encoding.py   encode numbers as neural input, decode motor activity
-  model.py         ReservoirModel (numpy) + build_torch_rnn (BPTT)
+  io_encoding.py   encode numbers as neural input; single + digit-serial decode
+  model.py         ReservoirModel (numpy) + build_torch_rnn (BPTT/RL policy)
   envs.py          the math curriculum (compare -> multi-digit mixed)
-  train.py         curriculum training loop + CLI
+  gym_env.py       MathFlyEnv: a Gymnasium RL world around the curriculum
+  train.py         training loop + CLI (reservoir | digits | bptt | rl)
+  rl_train.py      REINFORCE trainer (network as reward-driven agent)
   evaluate.py      accuracy + sample predictions
 scripts/
   download_connectome.py   fetch real data (neuPrint API or manual steps)
   run_demo.py              end-to-end smoke demo
-configs/           quickstart.yaml, full_connectome.yaml, bptt.yaml
-tests/             pytest smoke tests
+configs/           quickstart, full_connectome, digits, bptt, rl (.yaml)
+tests/             pytest smoke tests (8, all green)
 GUIDE.md           ← full training guide (start here)
 ```
 

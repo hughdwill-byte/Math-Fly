@@ -92,6 +92,58 @@ def train_reservoir(config: dict):
     return model, results
 
 
+def train_reservoir_digits(config: dict):
+    """Curriculum training with DIGIT-SERIAL readout: each answer is decoded
+    digit-by-digit, so large answers are no longer capped by a classifier size.
+    Metrics report both exact-match and per-digit accuracy."""
+    t0 = time.time()
+    conn = load_connectome(config)
+    print(f"[connectome] source={conn.source} N={conn.n} synapses={conn.W.nnz} "
+          f"rho~={conn.spectral_radius():.2f}")
+
+    tasks = _selected_tasks(config)
+    max_ans = max(t.max_answer for t in tasks)
+    n_digits = config.get("n_digits", max(1, len(str(max_ans))))
+    enc = IOEncoder(
+        n_neurons=conn.n, n_input=config.get("n_input", 64),
+        n_readout=config.get("n_readout", 256), n_answers=1,
+        n_digits=n_digits, steps_per_token=config.get("steps_per_token", 4),
+        input_gain=config.get("input_gain", 1.0), seed=config.get("seed", 0),
+    )
+    model = ReservoirModel(conn, enc, alpha=config.get("alpha", 0.3),
+                           noise=config.get("noise", 0.0), seed=config.get("seed", 0))
+
+    n_train = config.get("n_train", 400)
+    n_eval = config.get("n_eval", 200)
+    ridge = config.get("ridge", 1e-2)
+    results = []
+    print(f"[digit-serial] {n_digits} digit heads (answers up to {10**n_digits - 1})")
+    for task in tasks:
+        tr_prob, tr_ans = make_dataset(task, n_train, seed=config.get("seed", 0))
+        te_prob, te_ans = make_dataset(task, n_eval, seed=config.get("seed", 0) + 999)
+        Xtr = _collect_features(model, tr_prob)
+        model.fit_digit_readout(Xtr, tr_ans, ridge=ridge, name=task.name)
+
+        te_pred = [model.predict_number(p, name=task.name) for p in te_prob]
+        exact = _accuracy(te_pred, te_ans)
+        # per-digit accuracy
+        pd = np.array([enc.target_digits(p) for p in te_pred])
+        td = np.array([enc.target_digits(a) for a in te_ans])
+        digit_acc = float(np.mean(pd == td))
+        print(f"[{task.name:12s}] exact={exact:5.1%} per_digit={digit_acc:5.1%}"
+              f"  :: {task.description}")
+        results.append({"task": task.name, "exact_acc": exact, "digit_acc": digit_acc})
+
+    out_dir = config.get("out_dir", "runs/digits")
+    os.makedirs(out_dir, exist_ok=True)
+    model.save(os.path.join(out_dir, "readout.npz"))
+    with open(os.path.join(out_dir, "results.json"), "w") as f:
+        json.dump({"config": config, "results": results, "mode": "digits",
+                   "seconds": round(time.time() - t0, 1)}, f, indent=2)
+    print(f"[done] {time.time()-t0:.1f}s  ->  {out_dir}")
+    return model, results
+
+
 def train_bptt(config: dict):
     """Backprop-through-time on a single task (or the last curriculum level)."""
     import torch
@@ -156,7 +208,8 @@ def _load_config(path):
 def main():
     p = argparse.ArgumentParser(description="Train the Math-Fly connectome network.")
     p.add_argument("--config", help="JSON/YAML config file")
-    p.add_argument("--mode", choices=["reservoir", "bptt"], default="reservoir")
+    p.add_argument("--mode", choices=["reservoir", "digits", "bptt", "rl"],
+                   default="reservoir")
     p.add_argument("--tasks", nargs="*", help="subset of curriculum task names")
     p.add_argument("--synthetic-n", type=int, help="synthetic connectome size")
     p.add_argument("--n-train", type=int)
@@ -176,6 +229,11 @@ def main():
 
     if args.mode == "reservoir":
         train_reservoir(config)
+    elif args.mode == "digits":
+        train_reservoir_digits(config)
+    elif args.mode == "rl":
+        from .rl_train import train_rl
+        train_rl(config)
     else:
         train_bptt(config)
 

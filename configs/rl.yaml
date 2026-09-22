@@ -1,0 +1,20 @@
+# Reinforcement learning: train the connectome network as an agent rewarded for
+# correct answers (REINFORCE / policy gradients). Needs torch + gymnasium.
+# Usage:  python -m mathfly.train --mode rl --config configs/rl.yaml
+use_real: false
+synthetic_n: 600
+synthetic_density: 0.03
+spectral_radius: 1.1
+
+task: add_1digit            # single task per RL run
+n_input: 64
+n_readout: 128
+steps_per_token: 4
+alpha: 0.3
+
+lr: 0.003
+batch: 64
+n_iters: 400
+entropy_coef: 0.01         # exploration bonus
+seed: 0
+out_dir: runs/rl

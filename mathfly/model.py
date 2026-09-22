@@ -54,6 +54,8 @@ class ReservoirModel:
         # currently-selected head.
         self.W_out = np.zeros((encoder.n_answers, encoder.n_readout + 1), dtype=np.float32)
         self.readouts: dict[str, np.ndarray] = {}
+        # Digit-serial heads: name -> (n_digits, 10, n_readout+1) weight stack.
+        self.digit_heads: dict[str, np.ndarray] = {}
 
     def run(self, U: np.ndarray, x0: np.ndarray | None = None) -> np.ndarray:
         """Integrate the dynamics for input current series U (T, N).
@@ -117,15 +119,44 @@ class ReservoirModel:
             pred = self.W_out @ x
             self.W_out += lr * np.outer(y - pred, x).astype(np.float32)
 
+    # -- digit-serial training / prediction ------------------------------ #
+    def fit_digit_readout(self, feats: np.ndarray, answers, ridge: float = 1e-2,
+                          name: str | None = None):
+        """Fit one 10-way ridge classifier per digit position from the same
+        reservoir features. `answers` is a 1-D array of integer answers.
+        Stores a (n_digits, 10, F) weight stack under `name`."""
+        D = self.enc.n_digits
+        F = feats.shape[1]
+        A = feats.T @ feats + ridge * np.eye(F, dtype=np.float32)
+        Ainv_Xt = np.linalg.solve(A, feats.T)               # (F, M), shared
+        stack = np.zeros((D, 10, F), dtype=np.float32)
+        Yall = np.stack([self.enc.target_digits_onehot(a) for a in answers])  # (M, D, 10)
+        for d in range(D):
+            Wd = (Ainv_Xt @ Yall[:, d, :]).T                # (10, F)
+            stack[d] = Wd.astype(np.float32)
+        if name is not None:
+            self.digit_heads[name] = stack
+        self._cur_digit = stack
+        return stack
+
+    def predict_number(self, tokens: list[str], name: str | None = None) -> int:
+        stack = self.digit_heads[name] if name is not None else self._cur_digit
+        x = self.features(tokens)
+        digit_logits = stack @ x                             # (n_digits, 10)
+        return self.enc.decode_digits(digit_logits)
+
     # -- persistence ----------------------------------------------------- #
     def save(self, path: str):
         heads = {f"head::{k}": v for k, v in self.readouts.items()}
-        np.savez(path, W_out=self.W_out, b=self.b, alpha=np.float32(self.alpha), **heads)
+        dheads = {f"digit::{k}": v for k, v in self.digit_heads.items()}
+        np.savez(path, W_out=self.W_out, b=self.b, alpha=np.float32(self.alpha),
+                 **heads, **dheads)
 
     def load(self, path: str):
         d = np.load(path)
         self.W_out = d["W_out"]; self.b = d["b"]; self.alpha = float(d["alpha"])
         self.readouts = {k[len("head::"):]: d[k] for k in d.files if k.startswith("head::")}
+        self.digit_heads = {k[len("digit::"):]: d[k] for k in d.files if k.startswith("digit::")}
 
 
 # --------------------------------------------------------------------------- #

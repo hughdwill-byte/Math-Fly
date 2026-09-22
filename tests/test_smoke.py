@@ -50,3 +50,39 @@ def test_learns_above_chance():
     _, results = train_reservoir(config)
     r = results[0]
     assert r["test_acc"] > 3 * r["chance"], r
+
+
+def test_digit_encode_decode_roundtrip():
+    enc = IOEncoder(n_neurons=100, n_digits=4)
+    for a in [0, 7, 42, 100, 999, 1234]:
+        digits = enc.target_digits(a)
+        onehot = enc.target_digits_onehot(a)          # perfect "logits"
+        assert enc.decode_digits(onehot) == min(a, 9999)
+        assert digits[0] == a % 10                     # units-first
+
+
+def test_digit_serial_learns():
+    """Digit-serial readout should beat chance on units digit of addition."""
+    from mathfly.train import train_reservoir_digits
+    config = {"synthetic_n": 600, "synthetic_density": 0.03, "spectral_radius": 1.1,
+              "n_readout": 256, "n_train": 500, "n_eval": 200, "n_digits": 2,
+              "tasks": ["add_1digit"], "out_dir": "runs/_digtest", "seed": 0}
+    _, results = train_reservoir_digits(config)
+    # per-digit accuracy well above 10% chance
+    assert results[0]["digit_acc"] > 0.25, results
+
+
+def test_gym_env_roundtrip():
+    from mathfly.gym_env import make_env
+    env = make_env({"synthetic_n": 300}, task_name="add_1digit",
+                   n_input=32, n_readout=64)
+    obs, info = env.reset(seed=0)
+    assert obs.shape == (300,)
+    assert "answer" in info
+    term = False
+    steps = 0
+    while not term and steps < 1000:
+        obs, r, term, trunc, info = env.step(info["answer"])  # always answer correctly
+        steps += 1
+    assert term
+    assert r == 1.0 and info["correct"]      # correct action -> reward 1

@@ -50,6 +50,7 @@ class IOEncoder:
         n_answers: int = 100,
         steps_per_token: int = 4,
         input_gain: float = 1.0,
+        n_digits: int = 4,
         seed: int = 0,
     ):
         rng = np.random.default_rng(seed)
@@ -57,6 +58,7 @@ class IOEncoder:
         self.n_input = min(n_input, n_neurons)
         self.n_readout = min(n_readout, n_neurons)
         self.n_answers = n_answers
+        self.n_digits = n_digits          # for digit-serial decoding
         self.steps_per_token = steps_per_token
         self.input_gain = input_gain
 
@@ -103,7 +105,7 @@ class IOEncoder:
         w = self.settle_tokens * self.steps_per_token
         return slice(T - w, T)
 
-    # -- motor ----------------------------------------------------------- #
+    # -- motor: single-class readout ------------------------------------- #
     def target_onehot(self, answer: int) -> np.ndarray:
         y = np.zeros(self.n_answers, dtype=np.float32)
         y[int(np.clip(answer, 0, self.n_answers - 1))] = 1.0
@@ -111,3 +113,29 @@ class IOEncoder:
 
     def decode(self, logits: np.ndarray) -> int:
         return int(np.argmax(logits))
+
+    # -- motor: digit-serial readout ------------------------------------- #
+    # Instead of one big classifier over every possible answer (which explodes
+    # for multi-digit results), we read out each decimal digit independently
+    # with its own 10-way head. The answer space is then size-INDEPENDENT: a
+    # 4-digit reader covers 0..9999 with just 4*10 outputs. Position 0 = units.
+    def target_digits(self, answer: int) -> np.ndarray:
+        """Return (n_digits,) array of digit classes 0-9, units-first."""
+        a = int(max(0, answer))
+        out = np.empty(self.n_digits, dtype=np.int64)
+        for i in range(self.n_digits):
+            out[i] = a % 10
+            a //= 10
+        return out
+
+    def target_digits_onehot(self, answer: int) -> np.ndarray:
+        """(n_digits, 10) one-hot targets for the digit heads."""
+        digits = self.target_digits(answer)
+        Y = np.zeros((self.n_digits, 10), dtype=np.float32)
+        Y[np.arange(self.n_digits), digits] = 1.0
+        return Y
+
+    def decode_digits(self, digit_logits: np.ndarray) -> int:
+        """digit_logits: (n_digits, 10) -> integer. Position 0 = units."""
+        preds = np.argmax(digit_logits, axis=-1)
+        return int(sum(int(d) * (10 ** i) for i, d in enumerate(preds)))

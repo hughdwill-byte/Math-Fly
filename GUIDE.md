@@ -179,26 +179,66 @@ python -m mathfly.train --mode reservoir --tasks compare count add_1digit
 
 ---
 
-## 5. Train it harder — backprop-through-time (optional)
+## 5. The four training modes
 
-The reservoir keeps the connectome *entirely* fixed. To let learning also tune
-the **synaptic gains** — while still keeping every edge's sign and the wiring
-diagram intact (Dale's law preserved) — use the PyTorch path:
+`python -m mathfly.train --mode <mode>` supports four regimes. Start at the top
+and move down as you need more power.
+
+| Mode | Command | What learns | Needs | Best for |
+|------|---------|-------------|-------|----------|
+| `reservoir` | `--mode reservoir --config configs/quickstart.yaml` | one linear readout head per task | numpy | fast sweeps, "what can the raw wiring support?" |
+| `digits` | `--mode digits --config configs/digits.yaml` | per-digit readout heads | numpy | **large / multi-digit answers** (see below) |
+| `bptt` | `--mode bptt --config configs/bptt.yaml` | per-edge gains + I/O + readout | torch | pushing one hard task past the reservoir ceiling |
+| `rl` | `--mode rl --config configs/rl.yaml` | same, from **reward only** | torch + gymnasium | the "agent in a world" framing |
+
+### 5a. Digit-serial (`--mode digits`) — the key to big numbers
+
+A single classifier that has one output per possible answer explodes for large
+results (3-digit multiplication has answers up to ~40,000). Digit-serial output
+fixes this: the network reads out **each decimal digit independently** with its
+own 10-way head, so a 4-digit reader covers 0–9999 with just 4×10 outputs, and
+the answer space stops growing with the numbers.
 
 ```bash
+python -m mathfly.train --mode digits --config configs/digits.yaml
+```
+
+It reports **exact-match** and **per-digit** accuracy — watch the units digit
+saturate first, then the carries come in as you add capacity. Set `n_digits` to
+cover your largest answer.
+
+### 5b. Backprop-through-time (`--mode bptt`)
+
+The reservoir keeps the connectome *entirely* fixed. To also tune the **synaptic
+gains** — while keeping every edge's sign and the wiring diagram intact (Dale's
+law preserved) — use the PyTorch path. It optimizes a positive per-edge gain +
+input weights + readout with cross-entropy, unrolling the dynamics through time.
+Slower, one task at a time, but reaches accuracies the fixed reservoir can't. A
+GPU is picked up automatically.
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu
 python -m mathfly.train --mode bptt --config configs/bptt.yaml
 ```
 
-This optimizes a positive per-edge gain + the input weights + the readout with
-cross-entropy, unrolling the recurrent dynamics through time. It's slower and
-one-task-at-a-time, but it reaches accuracies the fixed reservoir can't. Use a
-GPU if you have one (it's picked up automatically).
+### 5c. Reinforcement learning (`--mode rl`)
 
-**When to use which:**
-- *Reservoir* — fast experiments, whole-curriculum sweeps, "how much can the raw
-  wiring support?", limited compute.
-- *BPTT* — "what's the ceiling if the fly's circuit could also adapt its synaptic
-  strengths?", single hard task, you have a GPU.
+The most "living agent" framing: the network is dropped into the
+[`MathFlyEnv`](mathfly/gym_env.py) Gymnasium world, sees the problem as timed
+sensory input, commits to an answer, and receives **only a scalar reward**
+(+1 correct / 0 wrong) — no one tells it the right answer. It's trained with
+REINFORCE (policy gradients) + a baseline and an entropy bonus.
+
+```bash
+pip install torch gymnasium
+python -m mathfly.train --mode rl --config configs/rl.yaml
+```
+
+Expect slower, noisier learning than the supervised modes — sparse reward over
+many possible answers is intrinsically high-variance. Use RL when the *reward-
+driven* framing is the point, or when you extend Math-Fly to a task where you
+only have a reward signal. `MathFlyEnv` is a standard `gymnasium.Env` (it passes
+`gymnasium`'s `check_env`), so you can also plug in any RL library (SB3, etc.).
 
 ---
 
@@ -232,20 +272,22 @@ or digit-serial output — often all three.
 
 ## 7. Extending the project
 
-- **Digit-serial output.** Replace the single softmax with one readout head per
-  output digit position (`io_encoding.py` → `target_onehot`, and give the model
-  several heads). This makes the answer space size-independent and unlocks large
-  numbers. This is the highest-value extension.
-- **True RL environment.** The tasks are supervised now. Wrap them as a
-  `gymnasium` env (reward for correct motor output) and train with policy
-  gradients for a more "agent living in a world" framing. `pip install .[rl]`.
+Two of the biggest extensions are now built in — **digit-serial output**
+(`--mode digits`, §5a) and a **Gymnasium RL environment + REINFORCE trainer**
+(`--mode rl`, §5c). What's left to explore:
+
 - **Curriculum transfer.** Instead of an independent head per level, warm-start
-  each level from the previous one (`partial_fit_readout`) to study transfer.
+  each level from the previous one (`ReservoirModel.partial_fit_readout`) to
+  study transfer between tasks.
 - **Read the brain.** Plot which cell **types** the trained readout leans on
   (`connectome.types` indexed by `encoder.readout_neurons`) to see *which fly
   circuits* the math solution recruited — the actually-interesting science.
+- **Bigger RL.** Swap REINFORCE for PPO via Stable-Baselines3 on `MathFlyEnv`,
+  or vectorize the env for throughput.
 - **Spiking dynamics.** Swap `tanh` rates for a leaky integrate-and-fire neuron
   for a more biophysical model.
+- **Digit-serial + BPTT.** Combine the two: give the torch RNN `n_digits` heads
+  and train with per-digit cross-entropy for multi-digit results end-to-end.
 
 ---
 
@@ -263,8 +305,12 @@ or digit-serial output — often all three.
 
 ## 9. Where things are
 
-- Configs: `configs/*.yaml` — copy and edit these; every knob above is exposed.
-- Results: `runs/<name>/results.json` (metrics) and `readout.npz` (trained heads).
-- Tests: `python -m pytest tests/` — confirms the pipeline learns above chance.
+- Configs: `configs/*.yaml` — `quickstart`, `full_connectome`, `digits`, `bptt`,
+  `rl`. Copy and edit; every knob above is exposed.
+- Modes: `python -m mathfly.train --mode {reservoir|digits|bptt|rl}`.
+- Results: `runs/<name>/results.json` (metrics) and `readout.npz` / `*.pt`.
+- RL world: `mathfly/gym_env.py` (`MathFlyEnv`, a standard `gymnasium.Env`).
+- Tests: `python -m pytest tests/` — 8 tests; confirm the pipeline learns above
+  chance, digit round-trips, and the env is Gymnasium-compliant.
 
 Happy training. 🪰➕

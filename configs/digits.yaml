@@ -1,0 +1,21 @@
+# Digit-serial readout: decode the answer digit-by-digit so LARGE answers are
+# not capped by classifier size. Great for multi-digit addition/multiplication.
+# Usage:  python -m mathfly.train --mode digits --config configs/digits.yaml
+use_real: false
+synthetic_n: 1200
+synthetic_density: 0.03
+spectral_radius: 1.15
+
+n_input: 96
+n_readout: 384
+steps_per_token: 5
+alpha: 0.3
+
+n_digits: 4                 # covers answers 0..9999 with just 4x10 outputs
+n_train: 1500
+n_eval: 400
+ridge: 0.01
+seed: 0
+
+tasks: [add_1digit, sub_1digit, add_2digit, mul_1digit, add_3digit, mixed_hard]
+out_dir: runs/digits

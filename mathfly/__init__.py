@@ -13,7 +13,7 @@ from .connectome import (Connectome, load_connectome, load_real_connectome,
 from .io_encoding import IOEncoder, VOCAB, tokenize_problem
 from .model import ReservoirModel, build_torch_rnn
 from .envs import CURRICULUM, CURRICULUM_BY_NAME, MathTask, make_dataset
-from .train import train_reservoir, train_bptt
+from .train import train_reservoir, train_reservoir_digits, train_bptt
 
 __version__ = "0.1.0"
 
@@ -21,5 +21,12 @@ __all__ = [
     "Connectome", "load_connectome", "load_real_connectome",
     "make_synthetic_connectome", "IOEncoder", "VOCAB", "tokenize_problem",
     "ReservoirModel", "build_torch_rnn", "CURRICULUM", "CURRICULUM_BY_NAME",
-    "MathTask", "make_dataset", "train_reservoir", "train_bptt", "__version__",
+    "MathTask", "make_dataset", "train_reservoir", "train_reservoir_digits",
+    "train_bptt", "__version__",
 ]
+
+
+def make_env(*args, **kwargs):
+    """Lazy re-export of the Gymnasium env builder (keeps gymnasium optional)."""
+    from .gym_env import make_env as _make_env
+    return _make_env(*args, **kwargs)
