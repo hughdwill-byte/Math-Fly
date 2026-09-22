@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "math-fly"
+version = "0.1.0"
+description = "Train a Drosophila male-CNS connectome-constrained network to do math."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+torch = ["torch>=2.0"]
+real = ["pandas>=2.0", "neuprint-python>=0.4"]
+rl = ["gymnasium>=0.29"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+math-fly-train = "mathfly.train:main"
+
+[tool.setuptools]
+packages = ["mathfly"]

@@ -1,0 +1,18 @@
+# Core (required) -- the NumPy reservoir pipeline runs with just these:
+numpy>=1.24
+scipy>=1.10
+
+# Config files (YAML). JSON configs work without this.
+PyYAML>=6.0
+
+# Optional: backprop-through-time training path (mathfly.train --mode bptt).
+# CPU wheel: pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch>=2.0 ; extra == "torch"
+
+# Optional: pull the REAL male-CNS connectome from neuPrint.
+#   pip install neuprint-python pandas
+pandas>=2.0 ; extra == "real"
+neuprint-python>=0.4 ; extra == "real"
+
+# Optional: RL-style environments if you extend beyond supervised tasks.
+gymnasium>=0.29 ; extra == "rl"

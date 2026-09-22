@@ -1,0 +1,25 @@
+# Data (the connectome is large -- don't commit it)
+data/connectome/*.csv
+data/**/*.parquet
+data/**/*.feather
+
+# Training outputs
+runs/
+*.npz
+*.pt
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

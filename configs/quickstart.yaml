@@ -1,0 +1,20 @@
+# Fast, synthetic-connectome run. No download needed. ~seconds on CPU.
+# Usage:  python -m mathfly.train --mode reservoir --config configs/quickstart.yaml
+use_real: false
+synthetic_n: 800
+synthetic_density: 0.03
+spectral_radius: 1.15
+
+n_input: 64
+n_readout: 256
+steps_per_token: 4
+alpha: 0.3
+noise: 0.0
+
+n_train: 300
+n_eval: 150
+ridge: 0.01
+seed: 0
+
+tasks: [compare, count, add_1digit, sub_1digit, mul_1digit]
+out_dir: runs/quickstart

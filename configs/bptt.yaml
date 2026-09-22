@@ -1,0 +1,19 @@
+# Backprop-through-time fine-tuning of connectome edge gains + readout.
+# Needs torch:  pip install torch --index-url https://download.pytorch.org/whl/cpu
+# Usage:  python -m mathfly.train --mode bptt --config configs/bptt.yaml
+use_real: false
+synthetic_n: 600
+synthetic_density: 0.03
+spectral_radius: 1.1
+
+task: add_1digit            # single task to optimise end-to-end
+n_input: 64
+n_readout: 128
+steps_per_token: 4
+alpha: 0.3
+
+lr: 0.003
+batch: 32
+n_iters: 300
+seed: 0
+out_dir: runs/bptt

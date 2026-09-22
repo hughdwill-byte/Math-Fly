@@ -1,0 +1,28 @@
+# Real male-CNS connectome run. First fetch the data:
+#   python scripts/download_connectome.py --neuprint --max-neurons 20000
+# (or --manual to download by hand). Then:
+#   python -m mathfly.train --mode reservoir --config configs/full_connectome.yaml
+use_real: true
+data_dir: data/connectome
+
+# Denoise + subsample the graph to fit your compute budget.
+min_synapses: 5
+max_neurons: 20000          # raise toward ~140000 for the whole brain (needs RAM)
+keep_types: null            # or e.g. ["KC", "MBON", "PN"] for a mushroom-body learner
+
+spectral_radius: 1.1        # dynamical operating point (edge of chaos ~1.0-1.5)
+
+n_input: 128
+n_readout: 512
+steps_per_token: 5
+alpha: 0.25
+
+n_train: 2000
+n_eval: 500
+ridge: 0.01
+seed: 0
+
+# Full ladder, easiest -> hardest.
+tasks: [compare, count, add_1digit, sub_1digit, add_2digit, mul_1digit,
+        mixed_easy, add_3digit, mixed_hard]
+out_dir: runs/full
