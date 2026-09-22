@@ -22,6 +22,10 @@
   .status .step b{color:var(--accent);}
   .legend{position:absolute;bottom:10px;left:0;right:0;display:flex;justify-content:center;flex-wrap:wrap;gap:14px;font-size:11px;color:var(--faint);}
   .legend span{display:flex;align-items:center;gap:6px;}.dot{width:9px;height:9px;border-radius:50%;}
+  .fxtoggle{position:absolute;top:12px;right:12px;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);
+    font-family:var(--mono);background:rgba(6,10,18,.7);border:1px solid var(--line);border-radius:999px;padding:4px 10px;
+    cursor:pointer;user-select:none;backdrop-filter:blur(4px);}
+  .fxtoggle input{accent-color:var(--exc);cursor:pointer;margin:0;}
   .calc{border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,var(--panel2),var(--panel));padding:14px;display:flex;flex-direction:column;gap:10px;}
   .disp{background:#070d18;border:1px solid var(--line);border-radius:12px;padding:12px 14px;text-align:right;min-height:84px;display:flex;flex-direction:column;justify-content:center;gap:2px;}
   .expr{font-family:var(--mono);font-size:16px;color:var(--ink);min-height:22px;overflow-x:auto;white-space:nowrap;}
@@ -55,6 +59,7 @@
   <div class="stage">
     <div class="brainbox">
       <canvas id="brain"></canvas>
+      <label class="fxtoggle" title="Turn the idle shimmer, heartbeat and spark trails on or off"><input type="checkbox" id="fx" checked> effects</label>
       <div class="status"><span class="step" id="step">ready</span></div>
       <div class="legend">
         <span><i class="dot" style="background:var(--exc)"></i>excitatory</span>
@@ -157,7 +162,7 @@ const DPR=()=>Math.min(2,devicePixelRatio||1);
 function paint(act,showInputs,R,frame){ctx.clearRect(0,0,CW,CH);
   if(edgeCanvas)ctx.drawImage(edgeCanvas,0,0,edgeCanvas.width/DPR(),edgeCanvas.height/DPR());
   // --- signal sparks travel on a fading trail layer, so they leave streaks on the wires ---
-  if(trailCtx){
+  if(FX&&trailCtx){
     trailCtx.globalCompositeOperation="destination-out";           // fade existing trail toward transparent
     trailCtx.fillStyle="rgba(0,0,0,0.12)";trailCtx.fillRect(0,0,CW,CH);
     if(R){trailCtx.globalCompositeOperation="lighter";const src=R[Math.max(0,frame-1)],ph=(clock*0.05)%1;
@@ -179,6 +184,9 @@ function paint(act,showInputs,R,frame){ctx.clearRect(0,0,CW,CH);
 function heartbeat(){const x=(clock%78)/78,g=(c,w)=>Math.exp(-((x-c)*(x-c))/(w*w));return g(0.06,0.045)+0.65*g(0.20,0.05);}
 function ambientAct(i){const p=POS[i],w=Math.max(0,Math.sin(p[1]*7-clock*0.028)*Math.cos(p[0]*6+clock*0.019));
   return 0.04+0.09*w+heartbeat()*(0.12+0.10*w);}
+// calm view: a fixed, clock-independent brightness map (no shimmer, no heartbeat, no sparks)
+function calmAct(i){const p=POS[i];return 0.06+0.07*Math.max(0,Math.sin(p[1]*7)*Math.cos(p[0]*6));}
+let FX=true,staticDrawn=false;
 
 // ---------- persistent animation loop (always alive) ----------
 const A={R:null,frame:0,inputSets:null,onDone:null,adv:1};
@@ -186,10 +194,11 @@ let tc=0,_lastR=null,clock=0;const SPEED=3;
 function runAnim(R,inputSets,label,onDone,quick){A.R=R;A.frame=0;A.inputSets=inputSets;A.onDone=onDone;A.adv=quick?3:1;_lastR=R;
   $("step").innerHTML=label;}
 function loop(){clock++;
-  if(A.R){const f=Math.min(A.frame,STEPS-1);paint(i=>Math.abs(A.R[f][i]),true,A.R,f);
+  if(A.R){staticDrawn=false;const f=Math.min(A.frame,STEPS-1);paint(i=>Math.abs(A.R[f][i]),true,A.R,f);
     if(A.frame>=STEPS-1){const cb=A.onDone;A.onDone=null;A.R=null;if(cb)cb();}
     else{tc++;if(tc>=SPEED){tc=0;A.frame+=A.adv;}}}
-  else paint(ambientAct,false,null,0);   // idle shimmer
+  else if(FX)paint(ambientAct,false,null,0);         // idle shimmer + heartbeat
+  else if(!staticDrawn){paint(calmAct,false,null,0);staticDrawn=true;}   // calm view: draw once, then hold
   requestAnimationFrame(loop);}
 function lastR(){return _lastR;}
 
@@ -295,7 +304,11 @@ $("clr").addEventListener("click",()=>{if(busy)return;curExpr="";setDisp("",0,""
 addEventListener("keydown",e=>{if(e.key>="0"&&e.key<="9")press(e.key);else if("+-*/()".includes(e.key))press(e.key);
   else if(e.key==="Enter"||e.key==="=")evaluate();else if(e.key==="c"||e.key==="Escape")$("clr").click();
   else if(e.key==="Backspace"){if(!busy){curExpr=curExpr.slice(0,-1);setDisp(curExpr);}}});
-addEventListener("resize",()=>{layout();});
+addEventListener("resize",()=>{layout();staticDrawn=false;});
+// effects on/off — default off if the viewer prefers reduced motion
+const reduced=matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches;
+FX=!reduced;$("fx").checked=FX;
+$("fx").addEventListener("change",e=>{FX=e.target.checked;staticDrawn=false;});
 $("realtag").textContent=M.source.includes("real")?"REAL male-CNS connectome":M.source;
 $("foot").innerHTML=`<span class="pill">${N.toLocaleString()} real neurons</span><span class="pill">${M.n_synapses.toLocaleString()} synapses</span>`+
   `<span class="pill">${M.movement_neurons} motor neurons</span><span class="pill">real anatomy</span><br>`+
