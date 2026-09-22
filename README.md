@@ -39,6 +39,25 @@ Expected output (a synthetic stand-in connectome, so you can develop offline):
 [mul_1digit  ] train=76.3% test=53.3% (chance 1.2%)
 ```
 
+## Watch it think 🧠
+
+Export a **standalone, interactive web page** where you type a problem and watch
+the fly's neurons fire as it solves it — teal for excitatory, rose for
+inhibitory, gold for the sensory neurons the digits arrive on. The page embeds
+the real trained weights and re-runs the exact reservoir dynamics **in the
+browser**, so the answer you see emerge is the model's genuine output (it even
+shows a ✓/✗ — a small brain sometimes guesses wrong, which is real).
+
+```bash
+python -m mathfly.export_web --out viz/fly_viz.html   # trains + builds the page
+# then just open viz/fly_viz.html in any browser
+```
+
+*How to read it:* digits pulse into the gold sensory neurons (top-right stream),
+signal spreads through the fixed fly wiring, and during the "thinking" window the
+readout neurons' activity is decoded into the answer — which you watch resolve in
+the side panel.
+
 Then swap in the **real** fly connectome:
 
 ```bash
@@ -93,11 +112,15 @@ mathfly/
   train.py         training loop + CLI (reservoir | digits | bptt | rl)
   rl_train.py      REINFORCE trainer (network as reward-driven agent)
   evaluate.py      accuracy + sample predictions
+  export_web.py    export a trained model to the interactive visualiser
 scripts/
   download_connectome.py   fetch real data (neuPrint API or manual steps)
   run_demo.py              end-to-end smoke demo
+viz/
+  fly_viz_template.html    the interactive brain player (weights injected in)
+  fly_viz.html             generated standalone visualiser (open in a browser)
 configs/           quickstart, full_connectome, digits, bptt, rl (.yaml)
-tests/             pytest smoke tests (8, all green)
+tests/             pytest smoke tests (9, all green)
 GUIDE.md           ← full training guide (start here)
 ```
 

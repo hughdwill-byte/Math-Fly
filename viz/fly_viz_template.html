@@ -1,0 +1,427 @@
+<title>Math-Fly Brain</title>
+<meta name="description" content="Watch a trained fruit-fly connectome fire neuron-by-neuron as it solves an arithmetic problem.">
+<style>
+  /* Deliberate single-theme "microscope field": glowing neural tissue reads
+     only on a dark ground, so we commit to it and paint every color explicitly
+     rather than borrowing the host theme. */
+  :root{
+    --bg:#060a12; --bg2:#0b1120; --panel:#0e1626; --panel2:#111c30;
+    --line:#1c2a44; --ink:#e8eef9; --muted:#8ba0c2; --faint:#5a6f92;
+    --exc:#37e0c6;      /* excitatory neuron glow (cool teal) */
+    --inh:#ff5f8d;      /* inhibitory neuron glow (warm rose) */
+    --accent:#ffce54;   /* the answer / signal gold */
+    --good:#4ce39a; --bad:#ff6b6b;
+    --mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+    --ui:"Sora",system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:
+      radial-gradient(1200px 700px at 70% -10%, #10203a 0%, rgba(16,32,58,0) 55%),
+      radial-gradient(900px 600px at 0% 110%, #191033 0%, rgba(25,16,51,0) 50%),
+      var(--bg);
+    color:var(--ink);font-family:var(--ui);font-size:15px;line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:20px 40px;}
+  header.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 14px;margin-bottom:14px;}
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand .fly{font-size:26px;filter:drop-shadow(0 0 10px rgba(55,224,198,.5));}
+  h1{font-size:clamp(20px,3.4vw,30px);font-weight:700;letter-spacing:-.01em;margin:0;text-wrap:balance;}
+  .sub{color:var(--muted);font-size:13px;margin-left:auto;max-width:44ch;text-align:right;}
+  .sub b{color:var(--exc);font-weight:600;}
+
+  /* control bar — the equation you pose to the fly */
+  .poser{display:flex;flex-wrap:wrap;align-items:center;gap:12px;
+    background:linear-gradient(180deg,var(--panel2),var(--panel));
+    border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:16px;
+    box-shadow:0 10px 30px rgba(0,0,0,.35);}
+  .eq{display:flex;align-items:center;gap:10px;font-family:var(--mono);}
+  .stepper{display:flex;flex-direction:column;align-items:center;gap:4px;}
+  .stepper label{font-family:var(--ui);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);}
+  .num{width:64px;height:56px;border-radius:12px;border:1px solid var(--line);
+    background:var(--bg2);color:var(--ink);font-family:var(--mono);font-size:28px;font-weight:700;
+    text-align:center;-moz-appearance:textfield;}
+  .num::-webkit-outer-spin-button,.num::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+  select.op{height:56px;border-radius:12px;border:1px solid var(--line);background:var(--bg2);
+    color:var(--accent);font-family:var(--mono);font-size:26px;font-weight:700;padding:0 10px;text-align:center;}
+  .eqsign{font-size:28px;color:var(--faint);font-family:var(--mono);}
+  button.solve{margin-left:auto;height:56px;padding:0 26px;border:0;border-radius:12px;cursor:pointer;
+    font-family:var(--ui);font-weight:700;font-size:16px;color:#12203a;
+    background:linear-gradient(180deg,#ffe08a,var(--accent));box-shadow:0 6px 18px rgba(255,206,84,.28);}
+  button.solve:active{transform:translateY(1px);}
+  button.solve:focus-visible,.num:focus-visible,select.op:focus-visible,input:focus-visible{
+    outline:2px solid var(--exc);outline-offset:2px;}
+
+  /* main stage */
+  .stage{display:grid;grid-template-columns:1fr 300px;gap:16px;}
+  @media (max-width:820px){.stage{grid-template-columns:1fr;}}
+  .brainbox{position:relative;border:1px solid var(--line);border-radius:16px;overflow:hidden;
+    background:radial-gradient(120% 120% at 50% 0,#0c1524 0,#070c15 70%);min-height:420px;}
+  canvas#brain{display:block;width:100%;height:100%;}
+  .phase{position:absolute;top:12px;left:14px;font-family:var(--mono);font-size:13px;
+    letter-spacing:.02em;color:var(--muted);background:rgba(6,10,18,.55);
+    border:1px solid var(--line);border-radius:999px;padding:5px 12px;backdrop-filter:blur(4px);}
+  .phase b{color:var(--accent);}
+  .stream{position:absolute;top:12px;right:14px;display:flex;gap:6px;}
+  .tok{width:30px;height:38px;display:grid;place-items:center;border-radius:8px;font-family:var(--mono);
+    font-weight:700;font-size:18px;color:var(--faint);background:rgba(12,20,34,.6);border:1px solid var(--line);
+    transition:all .15s ease;}
+  .tok.on{color:#0b1220;background:var(--exc);border-color:var(--exc);box-shadow:0 0 16px rgba(55,224,198,.6);transform:translateY(2px);}
+  .tok.done{color:var(--muted);}
+  .legend{position:absolute;bottom:10px;left:14px;display:flex;gap:14px;font-size:11px;color:var(--faint);}
+  .legend span{display:flex;align-items:center;gap:6px;}
+  .dot{width:9px;height:9px;border-radius:50%;}
+
+  /* readout panel */
+  .panel{border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,var(--panel2),var(--panel));
+    padding:16px;display:flex;flex-direction:column;gap:14px;}
+  .answer-card{text-align:center;padding:10px 8px 4px;}
+  .answer-card .lbl{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);}
+  .answer{font-family:var(--mono);font-weight:700;font-size:66px;line-height:1;color:var(--accent);
+    text-shadow:0 0 24px rgba(255,206,84,.35);font-variant-numeric:tabular-nums;transition:opacity .2s;}
+  .verdict{font-family:var(--mono);font-size:13px;margin-top:4px;min-height:18px;}
+  .verdict.ok{color:var(--good);} .verdict.no{color:var(--bad);}
+  .cands{display:flex;flex-direction:column;gap:8px;}
+  .cands h3{margin:0 0 2px;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);font-weight:600;}
+  .cand{display:grid;grid-template-columns:34px 1fr;align-items:center;gap:8px;font-family:var(--mono);font-size:13px;}
+  .cand .v{color:var(--muted);text-align:right;font-variant-numeric:tabular-nums;}
+  .bar{height:12px;border-radius:6px;background:var(--bg2);overflow:hidden;border:1px solid var(--line);}
+  .bar>i{display:block;height:100%;width:0;border-radius:6px;background:linear-gradient(90deg,var(--exc),var(--accent));transition:width .12s linear;}
+  .cand.lead .v{color:var(--accent);}
+
+  /* transport */
+  .transport{display:flex;align-items:center;gap:12px;margin-top:14px;
+    border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:10px 14px;}
+  .transport button{width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--bg2);
+    color:var(--ink);cursor:pointer;font-size:15px;}
+  .transport button:active{transform:translateY(1px);}
+  input[type=range]{flex:1;accent-color:var(--exc);}
+  .tclock{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:74px;text-align:right;}
+  .speed{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--faint);}
+  .foot{margin-top:16px;color:var(--faint);font-size:12px;line-height:1.6;}
+  .foot b{color:var(--muted);font-weight:600;}
+  .pill{display:inline-block;font-family:var(--mono);font-size:11px;color:var(--muted);
+    border:1px solid var(--line);border-radius:999px;padding:2px 9px;margin-right:6px;}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><span class="fly">🪰</span>
+      <div><h1>Math-Fly Brain</h1></div>
+    </div>
+    <div class="sub">A <b>connectome-constrained</b> network — the fruit fly's real wiring — solving arithmetic live. Every dot is a neuron; watch it fire.</div>
+  </header>
+
+  <div class="poser">
+    <div class="eq">
+      <div class="stepper"><label>a</label><input class="num" id="a" type="number" min="0" max="9" value="3"></div>
+      <div class="stepper"><label>op</label>
+        <select class="op" id="op">
+          <option value="+">+</option>
+          <option value="-">−</option>
+          <option value="*">×</option>
+          <option value=">">&gt;</option>
+        </select>
+      </div>
+      <div class="stepper"><label>b</label><input class="num" id="b" type="number" min="0" max="9" value="4"></div>
+      <span class="eqsign">=</span>
+    </div>
+    <button class="solve" id="solve">Ask the fly ▸</button>
+  </div>
+
+  <div class="stage">
+    <div class="brainbox">
+      <canvas id="brain"></canvas>
+      <div class="phase" id="phase">idle</div>
+      <div class="stream" id="stream"></div>
+      <div class="legend">
+        <span><i class="dot" style="background:var(--exc)"></i>excitatory</span>
+        <span><i class="dot" style="background:var(--inh)"></i>inhibitory</span>
+        <span><i class="dot" style="background:var(--accent)"></i>sensory in</span>
+      </div>
+    </div>
+
+    <aside class="panel">
+      <div class="answer-card">
+        <div class="lbl">the fly answers</div>
+        <div class="answer" id="answer">–</div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+      <div class="cands">
+        <h3>Readout — answer forming</h3>
+        <div id="cands"></div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="transport">
+    <button id="play" title="play / pause">▶</button>
+    <button id="restart" title="restart">⟲</button>
+    <input type="range" id="scrub" min="0" max="1" value="0" step="1">
+    <span class="tclock" id="clock">t 0 / 0</span>
+    <span class="speed"><label for="speed">speed</label>
+      <input type="range" id="speed" min="1" max="12" value="5" step="1" style="width:80px"></span>
+  </div>
+
+  <div class="foot" id="foot"></div>
+</div>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<script>
+"use strict";
+const BUNDLE = /*__BUNDLE__*/null;
+
+// ------------------------------------------------------------------ helpers
+const $ = id => document.getElementById(id);
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+
+// ------------------------------------------------- reservoir forward (in JS)
+// This reproduces mathfly.model.ReservoirModel exactly, so the answer you see
+// is the trained model's genuine output — nothing is faked.
+const M = BUNDLE.meta;
+const N = M.N, ALPHA = M.alpha, SPT = M.steps_per_token, SETTLE = M.settle_tokens, GAIN = M.input_gain;
+const EMBED = BUNDLE.embed, T2I = BUNDLE.token2id;
+const IN = BUNDLE.input_neurons, RD = BUNDLE.readout_neurons, SIGN = BUNDLE.sign, POS = BUNDLE.pos;
+const E_PRE = BUNDLE.edges.pre, E_POST = BUNDLE.edges.post, E_W = BUNDLE.edges.w, NE = E_W.length;
+
+const TASK_BY_OP = {};
+for(const name in BUNDLE.tasks){ TASK_BY_OP[BUNDLE.tasks[name].op] = Object.assign({name}, BUNDLE.tasks[name]); }
+
+function tokenize(a, op, b, isCompare){
+  const tok = [];
+  for(const c of String(a)) tok.push(c);
+  tok.push(isCompare ? "-" : op);      // compare is trained on "a - b ="
+  for(const c of String(b)) tok.push(c);
+  tok.push("=");
+  return tok;
+}
+
+function buildInput(tokens){
+  const T = (tokens.length + SETTLE) * SPT;
+  const U = [];                        // T arrays of length n_input applied to IN neurons
+  const drive = [];                    // token index shown at each frame (-1 = settle)
+  for(const tok of tokens){
+    const vec = EMBED[T2I[tok]];
+    for(let s=0;s<SPT;s++){ U.push(vec); drive.push(tok); }
+  }
+  const go = EMBED[T2I["<GO>"]];
+  for(let s=0;s<SETTLE*SPT;s++){ U.push(go); drive.push("=think"); }
+  return {U, drive, T};
+}
+
+function run(tokens){
+  const {U, drive, T} = buildInput(tokens);
+  const winStart = T - SETTLE*SPT;
+  let x = new Float32Array(N);
+  const R = [];                        // T Float32Arrays of length N (firing rates)
+  for(let t=0;t<T;t++){
+    const rPrev = new Float32Array(N);
+    for(let i=0;i<N;i++) rPrev[i] = Math.tanh(x[i]);
+    const rec = new Float32Array(N);
+    for(let k=0;k<NE;k++) rec[E_POST[k]] += E_W[k]*rPrev[E_PRE[k]];
+    const uvec = U[t];
+    const xn = new Float32Array(N);
+    for(let i=0;i<N;i++) xn[i] = (1-ALPHA)*x[i] + ALPHA*(rec[i]);
+    for(let j=0;j<IN.length;j++) xn[IN[j]] += ALPHA*(uvec[j]*GAIN);  // input on sensory neurons
+    const rt = new Float32Array(N);
+    for(let i=0;i<N;i++) rt[i] = Math.tanh(xn[i]);
+    R.push(rt); x = xn;
+  }
+  return {R, drive, T, winStart};
+}
+
+// readout: mean readout-neuron rate over [winStart, upTo) -> logits via W_out
+function readoutLogits(R, winStart, upTo, W_out){
+  const F = RD.length;
+  const mean = new Float32Array(F+1);
+  const cnt = Math.max(1, upTo - winStart);
+  for(let t=winStart;t<upTo;t++){ const rt=R[t]; for(let j=0;j<F;j++) mean[j]+=rt[RD[j]]; }
+  for(let j=0;j<F;j++) mean[j]/=cnt;
+  mean[F]=1.0;                          // bias
+  const A = W_out.length;
+  const logits = new Float32Array(A);
+  for(let a=0;a<A;a++){ let s=0; const w=W_out[a]; for(let j=0;j<=F;j++) s+=w[j]*mean[j]; logits[a]=s; }
+  return logits;
+}
+function topK(logits,k){
+  const idx=[...logits.keys()].sort((p,q)=>logits[q]-logits[p]).slice(0,k);
+  return idx.map(i=>({v:i,s:logits[i]}));
+}
+
+// ------------------------------------------------------------------ canvas
+const cv = $("brain"), ctx = cv.getContext("2d");
+let CW=0, CH=0, PTS=[];
+function layout(){
+  const dpr = Math.min(2, window.devicePixelRatio||1);
+  const r = cv.parentElement.getBoundingClientRect();
+  CW = r.width; CH = Math.max(420, r.height);
+  cv.width = CW*dpr; cv.height = CH*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+  const padX=26, padY=34;
+  PTS = POS.map(p=>[padX + p[0]*(CW-2*padX), padY + p[1]*(CH-2*padY)]);
+  drawEdges();
+}
+// static edge layer (drawn once per layout onto an offscreen canvas)
+let edgeCanvas=null;
+function drawEdges(){
+  edgeCanvas = document.createElement("canvas");
+  const dpr = Math.min(2, window.devicePixelRatio||1);
+  edgeCanvas.width=CW*dpr; edgeCanvas.height=CH*dpr;
+  const ec = edgeCanvas.getContext("2d"); ec.setTransform(dpr,0,0,dpr,0,0);
+  ec.lineWidth=0.6;
+  // subsample edges for legibility/perf on dense graphs
+  const stride = Math.max(1, Math.floor(NE/6000));
+  for(let k=0;k<NE;k+=stride){
+    const A=PTS[E_PRE[k]], B=PTS[E_POST[k]];
+    const inh = E_W[k]<0;
+    ec.strokeStyle = inh ? "rgba(255,95,141,0.05)" : "rgba(55,224,198,0.05)";
+    ec.beginPath(); ec.moveTo(A[0],A[1]); ec.lineTo(B[0],B[1]); ec.stroke();
+  }
+}
+const INSET = new Set(IN);
+function draw(frame){
+  ctx.clearRect(0,0,CW,CH);
+  if(edgeCanvas){ const dpr=Math.min(2,window.devicePixelRatio||1);
+    ctx.drawImage(edgeCanvas,0,0,edgeCanvas.width/dpr,edgeCanvas.height/dpr); }
+  const R = STATE.R;
+  ctx.globalCompositeOperation="lighter";
+  for(let i=0;i<N;i++){
+    const act = R ? Math.abs(R[frame][i]) : 0;
+    const exc = SIGN[i]>=0;
+    const base = exc ? [55,224,198] : [255,95,141];
+    const p = PTS[i];
+    const rad = 1.3 + act*3.6;
+    const alpha = 0.10 + act*0.85;
+    if(act>0.12){ ctx.shadowBlur = 6+act*16; ctx.shadowColor = `rgba(${base[0]},${base[1]},${base[2]},${alpha})`; }
+    else ctx.shadowBlur = 0;
+    ctx.fillStyle = `rgba(${base[0]},${base[1]},${base[2]},${alpha})`;
+    ctx.beginPath(); ctx.arc(p[0],p[1],rad,0,6.2832); ctx.fill();
+  }
+  ctx.shadowBlur=0; ctx.globalCompositeOperation="source-over";
+  // mark sensory neurons faintly so you can see where input enters
+  ctx.strokeStyle="rgba(255,206,84,0.25)"; ctx.lineWidth=1;
+  for(const i of IN){ const p=PTS[i]; ctx.beginPath(); ctx.arc(p[0],p[1],2.4,0,6.2832); ctx.stroke(); }
+}
+
+// ------------------------------------------------------------------ state + playback
+const STATE = { R:null, drive:null, T:0, winStart:0, tokens:[], task:null, frame:0, playing:false, answer:null, correct:null };
+let raf=null, acc=0;
+
+function poseProblem(){
+  let a = clamp(parseInt($("a").value||"0"),0,9);
+  let b = clamp(parseInt($("b").value||"0"),0,9);
+  $("a").value=a; $("b").value=b;
+  const op = $("op").value;
+  const task = TASK_BY_OP[op];
+  if(!task){ return; }
+  const isCompare = !!task.compare;
+  // subtraction is trained non-negative; present the larger first (as in training)
+  if(op==="-" && b>a){ [a,b]=[b,a]; $("a").value=a; $("b").value=b; }
+  const tokens = tokenize(a,op,b,isCompare);
+  const {R, drive, T, winStart} = run(tokens);
+  const logits = readoutLogits(R, winStart, T, task.W_out);
+  const ans = topK(logits,1)[0].v;
+  // ground truth for the verdict
+  let truth;
+  if(op==="+") truth=a+b; else if(op==="-") truth=a-b; else if(op==="*") truth=a*b; else truth=(a>b)?1:0;
+  Object.assign(STATE,{R,drive,T,winStart,tokens,task,frame:0,answer:ans,correct:(ans===truth),truth,a,b,op});
+  buildStream(tokens, op, isCompare);
+  $("scrub").max = T-1; $("scrub").value=0;
+  play();
+}
+
+function buildStream(tokens, op, isCompare){
+  const s=$("stream"); s.innerHTML="";
+  // display operator glyph instead of the trained "-" for compare
+  const disp = tokens.map(t=> t==="=" ? "=" : t);
+  if(isCompare){ const oi=tokens.indexOf("-"); if(oi>=0) disp[oi]=">"; }
+  disp.forEach((t,i)=>{ const d=document.createElement("div"); d.className="tok"; d.dataset.i=i; d.textContent=t; s.appendChild(d); });
+}
+
+function phaseLabel(frame){
+  const d = STATE.drive[frame];
+  if(d==="=think") return 'thinking <b>· · ·</b>';
+  if(d==="=") return 'reading <b>=</b>';
+  return 'reading <b>'+ (d==='-'&&STATE.op==='>'?'>':d) +'</b>';
+}
+
+function updatePanels(frame){
+  $("phase").innerHTML = phaseLabel(frame);
+  $("clock").textContent = `t ${frame+1} / ${STATE.T}`;
+  $("scrub").value = frame;
+  // token stream highlight
+  const tokEls = $("stream").children;
+  const tokIdx = Math.floor(frame/SPT);
+  for(let i=0;i<tokEls.length;i++){ tokEls[i].classList.toggle("on", i===tokIdx && frame<STATE.tokens.length*SPT);
+    tokEls[i].classList.toggle("done", i<tokIdx); }
+  // readout forms during the settle window
+  const inSettle = frame >= STATE.winStart;
+  const cont=$("cands");
+  if(inSettle){
+    const logits = readoutLogits(STATE.R, STATE.winStart, frame+1, STATE.task.W_out);
+    const top = topK(logits,4);
+    const max = Math.max(...top.map(t=>t.s)), min=Math.min(...top.map(t=>t.s));
+    cont.innerHTML="";
+    top.forEach((t,i)=>{
+      const frac = (max>min)?(t.s-min)/(max-min):0.5;
+      const row=document.createElement("div"); row.className="cand"+(i===0?" lead":"");
+      row.innerHTML=`<span class="v">${labelFor(t.v)}</span><div class="bar"><i style="width:${(6+frac*94).toFixed(0)}%"></i></div>`;
+      cont.appendChild(row);
+    });
+    // live answer
+    $("answer").textContent = labelFor(top[0].v);
+    $("answer").style.opacity = "1";
+  } else {
+    cont.innerHTML = `<div style="color:var(--faint);font-size:12px;font-family:var(--mono)">…integrating the inputs…</div>`;
+    $("answer").textContent = "–"; $("answer").style.opacity=".5";
+    $("verdict").textContent=""; $("verdict").className="verdict";
+  }
+  // final verdict only at the end
+  if(frame===STATE.T-1){
+    $("answer").textContent = labelFor(STATE.answer);
+    const v=$("verdict");
+    const truthLbl = labelFor(STATE.truth);
+    if(STATE.correct){ v.textContent="✓ correct"; v.className="verdict ok"; }
+    else { v.textContent="✗ it guessed (true: "+truthLbl+")"; v.className="verdict no"; }
+  }
+}
+
+function labelFor(v){
+  if(STATE.task && STATE.task.compare) return v===1 ? "TRUE" : "FALSE";
+  return String(v);
+}
+
+// -------- transport
+function frameStep(ts){
+  if(!STATE.playing){ raf=null; return; }
+  const spd = parseInt($("speed").value);
+  acc += 1;
+  if(acc >= (13-spd)){ acc=0; STATE.frame++; if(STATE.frame>=STATE.T){ STATE.frame=STATE.T-1; STATE.playing=false; $("play").textContent="▶"; }
+    draw(STATE.frame); updatePanels(STATE.frame); }
+  raf = requestAnimationFrame(frameStep);
+}
+function play(){ STATE.playing=true; $("play").textContent="❚❚"; if(!raf) raf=requestAnimationFrame(frameStep); }
+function pause(){ STATE.playing=false; $("play").textContent="▶"; }
+
+$("solve").onclick = poseProblem;
+$("play").onclick = ()=>{ if(STATE.playing) pause(); else { if(STATE.frame>=STATE.T-1) STATE.frame=0; play(); } };
+$("restart").onclick = ()=>{ STATE.frame=0; draw(0); updatePanels(0); play(); };
+$("scrub").oninput = e=>{ pause(); STATE.frame=clamp(+e.target.value,0,STATE.T-1); draw(STATE.frame); updatePanels(STATE.frame); };
+["a","b"].forEach(id=>$(id).addEventListener("keydown",e=>{ if(e.key==="Enter") poseProblem(); }));
+window.addEventListener("resize", ()=>{ layout(); if(STATE.R) draw(STATE.frame); });
+
+// footer facts (real numbers from the bundle)
+$("foot").innerHTML =
+  `<span class="pill">${M.source} connectome</span>`+
+  `<span class="pill">${N.toLocaleString()} neurons</span>`+
+  `<span class="pill">${M.n_synapses.toLocaleString()} synapses</span>`+
+  `<span class="pill">${IN.length} sensory · ${RD.length} readout</span><br>`+
+  `<b>How to read it:</b> digits and the operator arrive as timed pulses on the gold sensory neurons (top-right stream). `+
+  `Signal spreads through the fixed fly wiring — teal excitatory, rose inhibitory — and during the “thinking” window the readout neurons’ activity is decoded into the answer. `+
+  `The wiring is frozen anatomy; only the readout was trained, so sometimes the little brain guesses wrong — that’s real.`;
+
+// boot: lay out and auto-solve the default problem so the page opens "alive"
+layout();
+poseProblem();
+</script>

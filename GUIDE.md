@@ -270,6 +270,35 @@ or digit-serial output — often all three.
 
 ---
 
+## 6b. Watch the fly think (the visualiser)
+
+Once you have a trained model, export an interactive page and watch the brain
+solve problems you type:
+
+```bash
+python -m mathfly.export_web --out viz/fly_viz.html
+# open viz/fly_viz.html in any browser (no server needed)
+```
+
+What it does: it trains (or you can point it at a config), serialises the
+connectome + frozen recurrent weights + sensory embedding + trained readout
+heads into the page, and the page **re-runs the exact reservoir dynamics in
+JavaScript**. So it's not a canned animation — type `6 × 7`, hit *Ask the fly*,
+and you watch:
+
+- the digits and operator arrive as **timed pulses** on the gold sensory neurons,
+- signal spread through the fly's fixed wiring (teal = excitatory, rose =
+  inhibitory), neuron by neuron,
+- the **readout resolve** during the "thinking" window into a final answer, with
+  a ✓/✗ against the true value (a small brain sometimes guesses wrong — that's
+  honest).
+
+Under the hood, `mathfly/export_web.py`'s `reference_forward()` is a NumPy mirror
+of the in-browser math, and a unit test asserts the two agree with the Python
+model — so the page can never silently drift from the real network. To visualise
+the **real** connectome, train with `configs/full_connectome.yaml` first (keep
+`max_neurons` in the low thousands so the page stays light) and re-export.
+
 ## 7. Extending the project
 
 Two of the biggest extensions are now built in — **digit-serial output**

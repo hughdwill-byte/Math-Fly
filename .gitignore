@@ -8,6 +8,9 @@ runs/
 *.npz
 *.pt
 
+# Visualiser intermediate (the standalone viz/fly_viz.html embeds this)
+viz/fly_bundle.json
+
 # Python
 __pycache__/
 *.py[cod]
