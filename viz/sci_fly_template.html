@@ -1,0 +1,211 @@
+<title>Scientific Calculator Fly</title>
+<meta name="description" content="The real Janelia male-CNS fruit-fly connectome, trained to work like a pocket scientific calculator — and still able to move.">
+<style>
+  :root{--bg:#060a12;--bg2:#0b1120;--panel:#0e1626;--panel2:#111c30;--line:#1c2a44;
+    --ink:#e8eef9;--muted:#8ba0c2;--faint:#5a6f92;--exc:#37e0c6;--inh:#ff5f8d;--accent:#ffce54;
+    --good:#4ce39a;--bad:#ff6b6b;--motor:#8ab4ff;--key:#16233b;--fn:#1a2a1f;
+    --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;--ui:"Sora",system-ui,sans-serif;}
+  *{box-sizing:border-box}html,body{height:100%}
+  body{margin:0;background:radial-gradient(1200px 700px at 70% -10%,#10203a 0,rgba(16,32,58,0) 55%),radial-gradient(900px 600px at 0% 110%,#191033 0,rgba(25,16,51,0) 50%),var(--bg);
+    color:var(--ink);font-family:var(--ui);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:20px 40px;}
+  header.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 14px;margin-bottom:6px;}
+  .brand{display:flex;align-items:center;gap:10px;}.brand .fly{font-size:26px;filter:drop-shadow(0 0 10px rgba(55,224,198,.5));}
+  h1{font-size:clamp(20px,3.4vw,30px);font-weight:700;letter-spacing:-.01em;margin:0;text-wrap:balance;}
+  .sub{color:var(--muted);font-size:13px;margin-left:auto;max-width:46ch;text-align:right;}.sub b{color:var(--exc);font-weight:600;}
+  .real{display:inline-block;font-family:var(--mono);font-size:11px;color:#0b1220;background:var(--exc);border-radius:999px;padding:2px 9px;margin-bottom:12px;font-weight:700;}
+  .stage{display:grid;grid-template-columns:1fr 340px;gap:16px;}@media(max-width:860px){.stage{grid-template-columns:1fr;}}
+  .brainbox{position:relative;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:radial-gradient(120% 120% at 50% 0,#0c1524 0,#070c15 70%);min-height:470px;}
+  canvas#brain{display:block;width:100%;height:100%;}
+  .phase{position:absolute;top:12px;left:14px;font-family:var(--mono);font-size:13px;color:var(--muted);background:rgba(6,10,18,.55);border:1px solid var(--line);border-radius:999px;padding:5px 12px;backdrop-filter:blur(4px);}
+  .phase b{color:var(--accent);}
+  .legend{position:absolute;bottom:10px;left:14px;display:flex;flex-wrap:wrap;gap:12px;font-size:11px;color:var(--faint);}
+  .legend span{display:flex;align-items:center;gap:6px;}.dot{width:9px;height:9px;border-radius:50%;}
+  .calc{border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,var(--panel2),var(--panel));padding:14px;display:flex;flex-direction:column;gap:10px;}
+  .disp{background:#070d18;border:1px solid var(--line);border-radius:12px;padding:12px 14px;text-align:right;min-height:78px;display:flex;flex-direction:column;justify-content:center;}
+  .expr{font-family:var(--mono);font-size:14px;color:var(--muted);min-height:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ans{font-family:var(--mono);font-size:34px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;text-shadow:0 0 18px rgba(255,206,84,.3);line-height:1.1;overflow:hidden;text-overflow:ellipsis;}
+  .accline{font-size:10px;color:var(--faint);text-align:right;min-height:14px;}
+  .keys{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;}
+  .fns{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;}
+  button.k{height:46px;border:1px solid var(--line);border-radius:11px;background:var(--key);color:var(--ink);font-family:var(--mono);font-size:18px;cursor:pointer;}
+  button.k:active{transform:translateY(1px);}button.k.op{color:var(--accent);}
+  button.k.fn{background:var(--fn);color:var(--good);font-size:15px;font-family:var(--ui);font-weight:600;}
+  button.k.eq{background:linear-gradient(180deg,#ffe08a,var(--accent));color:#12203a;font-weight:700;}
+  button.k.clr{color:var(--bad);}
+  button:focus-visible{outline:2px solid var(--exc);outline-offset:2px;}
+  .move{border-top:1px solid var(--line);padding-top:10px;}
+  .move h3{margin:0 0 7px;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);font-weight:600;}
+  .movegrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+  .movebtn{height:40px;border:1px solid var(--line);border-radius:10px;background:var(--bg2);color:var(--motor);cursor:pointer;font-size:15px;}
+  .movebtn.on{background:var(--motor);color:#0b1220;box-shadow:0 0 14px rgba(138,180,255,.5);}
+  .movestat{margin-top:6px;font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;min-height:16px;}.movestat b{color:var(--motor);}
+  .foot{margin-top:16px;color:var(--faint);font-size:12px;line-height:1.6;}.foot b{color:var(--muted);}
+  .pill{display:inline-block;font-family:var(--mono);font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:2px 9px;margin-right:6px;}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><span class="fly">🪰</span><div><h1>Scientific Calculator Fly</h1></div></div>
+    <div class="sub">The <b>real male-CNS connectome</b> trained to work like a pocket scientific calculator over 0–99 — and it still moves.</div>
+  </header>
+  <span class="real" id="realtag">real fly</span>
+
+  <div class="stage">
+    <div class="brainbox">
+      <canvas id="brain"></canvas>
+      <div class="phase" id="phase">idle</div>
+      <div class="legend">
+        <span><i class="dot" style="background:var(--exc)"></i>excitatory</span>
+        <span><i class="dot" style="background:var(--inh)"></i>inhibitory</span>
+        <span><i class="dot" style="background:var(--accent)"></i>number input</span>
+        <span><i class="dot" style="background:var(--motor)"></i>motor neuron</span>
+      </div>
+    </div>
+
+    <aside class="calc">
+      <div class="disp">
+        <div class="expr" id="expr">&nbsp;</div>
+        <div class="ans" id="ans">0</div>
+      </div>
+      <div class="accline" id="acc">&nbsp;</div>
+      <div class="fns">
+        <button class="k fn" data-fn="square">x²</button>
+        <button class="k fn" data-fn="sqrt">√</button>
+        <button class="k fn" data-fn="inv">1/x</button>
+        <button class="k fn" data-fn="sin">sin</button>
+        <button class="k fn" data-fn="cos">cos</button>
+        <button class="k fn" data-fn="log">log</button>
+      </div>
+      <div class="keys">
+        <button class="k" data-d="7">7</button><button class="k" data-d="8">8</button><button class="k" data-d="9">9</button><button class="k op" data-op="div">÷</button>
+        <button class="k" data-d="4">4</button><button class="k" data-d="5">5</button><button class="k" data-d="6">6</button><button class="k op" data-op="mul">×</button>
+        <button class="k" data-d="1">1</button><button class="k" data-d="2">2</button><button class="k" data-d="3">3</button><button class="k op" data-op="sub">−</button>
+        <button class="k clr" id="clr">C</button><button class="k" data-d="0">0</button><button class="k eq" id="eq">=</button><button class="k op" data-op="add">+</button>
+      </div>
+      <div class="move">
+        <h3>Basic movement (real motor neurons)</h3>
+        <div class="movegrid">
+          <button class="movebtn" data-c="1">◀</button><button class="movebtn" data-c="0">▲</button>
+          <button class="movebtn" data-c="3">■</button><button class="movebtn" data-c="2">▶</button>
+        </div>
+        <div class="movestat" id="movestat"></div>
+      </div>
+    </aside>
+  </div>
+  <div class="foot" id="foot"></div>
+</div>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<script>
+"use strict";
+const B=/*__BUNDLE__*/null;
+const $=id=>document.getElementById(id);
+const M=B.meta,N=M.N,ALPHA=M.alpha,GAIN=M.gain,STEPS=M.steps,RWIN=M.read_win;
+const SIGN=B.sign,POS=B.pos,SLOTS=B.slot_sets,CMDS=B.cmd_sets,READ=B.read,MOTOR=B.motor,OPS=B.ops,TR=B.trunk;
+const E_PRE=B.edges.pre,E_POST=B.edges.post,E_W=B.edges.w,NE=E_W.length;
+
+// ---- dynamics + net (mirrors mathfly.sci_fly) ----
+function runState(activeSets){
+  const u=new Float32Array(N);
+  for(const set of activeSets) for(const n of set) u[n]+=GAIN;
+  let x=new Float32Array(N);const R=[];
+  for(let t=0;t<STEPS;t++){
+    const r=new Float32Array(N);for(let i=0;i<N;i++)r[i]=Math.tanh(x[i]);
+    const rec=new Float32Array(N);for(let k=0;k<NE;k++)rec[E_POST[k]]+=E_W[k]*r[E_PRE[k]];
+    const xn=new Float32Array(N);for(let i=0;i<N;i++)xn[i]=(1-ALPHA)*x[i]+ALPHA*(rec[i]+u[i]);
+    const rt=new Float32Array(N);for(let i=0;i<N;i++)rt[i]=Math.tanh(xn[i]);
+    R.push(rt);x=xn;
+  }
+  return R;
+}
+function feat(R,neurons,upTo){const F=neurons.length,m=new Float32Array(F+1),lo=STEPS-RWIN,hi=Math.min(upTo+1,STEPS),cnt=Math.max(1,hi-lo);
+  for(let t=lo;t<hi;t++){const rt=R[t];for(let j=0;j<F;j++)m[j]+=rt[neurons[j]];}for(let j=0;j<F;j++)m[j]/=cnt;m[F]=1;return m;}
+function mvec(Wr,x){const o=new Float32Array(Wr.length);for(let i=0;i<Wr.length;i++){let s=0;const w=Wr[i];for(let j=0;j<x.length;j++)s+=w[j]*x[j];o[i]=s;}return o;}
+function addb(v,b){const o=new Float32Array(v.length);for(let i=0;i<v.length;i++)o[i]=v[i]+b[i];return o;}
+function relu(v){const o=new Float32Array(v.length);for(let i=0;i<v.length;i++)o[i]=v[i]>0?v[i]:0;return o;}
+function argmaxSeg(v,off){let bi=0,bv=-1e9;for(let i=0;i<10;i++)if(v[off+i]>bv){bv=v[off+i];bi=i;}return bi;}
+function trunk(f){return relu(addb(mvec(TR.W2,relu(addb(mvec(TR.W1,f),TR.b1))),TR.b2));}
+function decodeOp(op,R,upTo){
+  const z=trunk(feat(R,READ,upTo)),o=addb(mvec(op.W,z),op.hb);
+  let mag=0;for(let d=0;d<op.K;d++)mag+=argmaxSeg(o,d*10)*Math.pow(10,d);
+  let sign=0;if(op.signed){sign=(o[op.K*10+1]>o[op.K*10])?1:0;}
+  let v=mag/Math.pow(10,op.dec);return op.signed&&sign?-v:v;
+}
+function numSets(x,base){return [SLOTS[base][Math.floor(x/10)],SLOTS[base+1][x%10]];}
+
+// ---- canvas ----
+const cv=$("brain"),ctx=cv.getContext("2d");let CW,CH,PTS=[],edgeCanvas=null;
+function layout(){const dpr=Math.min(2,devicePixelRatio||1),r=cv.parentElement.getBoundingClientRect();
+  CW=r.width;CH=Math.max(470,r.height);cv.width=CW*dpr;cv.height=CH*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+  const px=26,py=30;PTS=POS.map(p=>[px+p[0]*(CW-2*px),py+p[1]*(CH-2*py)]);drawEdges();}
+function drawEdges(){const dpr=Math.min(2,devicePixelRatio||1);edgeCanvas=document.createElement("canvas");
+  edgeCanvas.width=CW*dpr;edgeCanvas.height=CH*dpr;const ec=edgeCanvas.getContext("2d");ec.setTransform(dpr,0,0,dpr,0,0);ec.lineWidth=0.5;
+  const st=Math.max(1,Math.floor(NE/6000));for(let k=0;k<NE;k+=st){const A=PTS[E_PRE[k]],Bp=PTS[E_POST[k]];
+    ec.strokeStyle=E_W[k]<0?"rgba(255,95,141,0.045)":"rgba(55,224,198,0.045)";ec.beginPath();ec.moveTo(A[0],A[1]);ec.lineTo(Bp[0],Bp[1]);ec.stroke();}}
+function render(frame){ctx.clearRect(0,0,CW,CH);
+  if(edgeCanvas){const dpr=Math.min(2,devicePixelRatio||1);ctx.drawImage(edgeCanvas,0,0,edgeCanvas.width/dpr,edgeCanvas.height/dpr);}
+  const R=S.R;ctx.globalCompositeOperation="lighter";
+  for(let i=0;i<N;i++){const act=R?Math.abs(R[frame][i]):0,base=SIGN[i]>=0?[55,224,198]:[255,95,141],p=PTS[i],rad=1.2+act*3.4,al=0.09+act*0.85;
+    if(act>0.12){ctx.shadowBlur=6+act*15;ctx.shadowColor=`rgba(${base[0]},${base[1]},${base[2]},${al})`;}else ctx.shadowBlur=0;
+    ctx.fillStyle=`rgba(${base[0]},${base[1]},${base[2]},${al})`;ctx.beginPath();ctx.arc(p[0],p[1],rad,0,6.2832);ctx.fill();}
+  ctx.shadowBlur=0;ctx.globalCompositeOperation="source-over";
+  if(S.activeSets){ctx.strokeStyle="rgba(255,206,84,.6)";ctx.lineWidth=1.4;for(const set of S.activeSets)for(const n of set){const p=PTS[n];ctx.beginPath();ctx.arc(p[0],p[1],3,0,6.2832);ctx.stroke();}}
+  ctx.strokeStyle="rgba(138,180,255,.3)";ctx.lineWidth=1;for(const i of MOTOR){const p=PTS[i];ctx.beginPath();ctx.arc(p[0],p[1],2.1,0,6.2832);ctx.stroke();}}
+
+// ---- calculator state ----
+const S={R:null,frame:0,playing:false,activeSets:null,mode:"num",acc:0};
+let raf=null;
+const C={entry:"0",stored:null,op:null};   // pending binary op
+function setDisp(expr,ans,accTxt){$("expr").innerHTML=expr||"&nbsp;";$("ans").textContent=ans;$("acc").innerHTML=accTxt||"&nbsp;";}
+function pressDigit(d){if(C.entry.length>=2&&C.justEq!==true)C.entry=C.entry;C.justEq=false;
+  C.entry=(C.entry==="0"?"":C.entry)+d;if(+C.entry>99)C.entry="99";setDisp(exprStr(),C.entry);}
+function exprStr(){if(C.op&&C.stored!=null)return `${C.stored} ${OPS[C.op].sym} ${C.entry==="0"&&C.awaitB?"":C.entry}`;return C.entry;}
+function pressOp(op){C.stored=+C.entry;C.op=op;C.awaitB=true;C.entry="0";C.justEq=false;setDisp(`${C.stored} ${OPS[op].sym}`,"0");}
+function pressEq(){if(C.op==null||C.stored==null)return;let a=C.stored,b=+C.entry;const op=OPS[C.op];
+  runCompute(C.op,a,b,`${a} ${op.sym} ${b} =`);C.justEq=true;C.awaitB=false;}
+function pressFn(name){const op=OPS[name],a=+C.entry;runCompute(name,a,0,`${op.sym}(${a}) =`);C.justEq=true;}
+function fmt(op,v){return op.dec>0?v.toFixed(op.dec):String(Math.round(v));}
+
+function runCompute(name,a,b,expr){
+  const op=OPS[name];
+  if(op.arity===2){a=Math.min(99,Math.max(op.a[0],a));b=Math.min(op.b[1],Math.max(op.b[0],b));}
+  else{a=Math.min(op.a[1],Math.max(op.a[0],a));}
+  S.activeSets=op.arity===2?[...numSets(a,0),...numSets(b,2)]:numSets(a,0);
+  S.R=runState(S.activeSets);S.frame=0;S.mode="calc";S.op=op;S.name=name;S.expr=expr;
+  const v=decodeOp(op,S.R,STEPS-1);S.value=v;
+  const nm={add:"addition",sub:"subtraction",mul:"multiplication",div:"division",square:"squares",sqrt:"square roots",sin:"sine",cos:"cosine",log:"log₁₀",inv:"reciprocals"}[name];
+  S.accTxt=`fly scores <b>${Math.round(op.accuracy*100)}%</b> on ${nm} over its range`;
+  C.entry=fmt(op,v);
+  document.querySelectorAll(".movebtn").forEach(x=>x.classList.remove("on"));$("movestat").textContent="";
+  play();
+}
+function doMove(c){S.mode="move";S.activeSets=[CMDS[c]];S.R=runState([CMDS[c]]);S.frame=0;
+  const f=feat(S.R,MOTOR,STEPS-1);let bi=0,bv=-1e9;const o=mvec(B.movement.W_move,f);for(let i=0;i<o.length;i++)if(o[i]>bv){bv=o[i];bi=i;}
+  S.moveDir=bi;document.querySelectorAll(".movebtn").forEach(x=>x.classList.toggle("on",+x.dataset.c===c));play();}
+
+function updatePanel(frame){
+  const inRead=frame>=STEPS-RWIN;$("phase").innerHTML=S.mode==="move"?'driving <b>motor neurons</b>':(inRead?'computing <b>· · ·</b>':'holding the numbers');
+  if(S.mode==="move"){$("ans").textContent="🪰";$("expr").textContent="movement";
+    if(frame===STEPS-1)$("movestat").innerHTML=`motor output → <b>${B.movement.commands[S.moveDir]}</b> ✓`;else $("movestat").textContent="motor neurons firing…";return;}
+  if(inRead){const v=decodeOp(S.op,S.R,frame);setDisp(S.expr,fmt(S.op,v),S.accTxt);}
+  else setDisp(S.expr,"…",S.accTxt);
+  if(frame===STEPS-1)setDisp(S.expr,fmt(S.op,S.value),S.accTxt);
+}
+function step(){if(!S.playing){raf=null;return;}S.acc=(S.acc||0)+1;if(S.acc>=3){S.acc=0;S.frame++;
+  if(S.frame>=STEPS){S.frame=STEPS-1;S.playing=false;}render(S.frame);updatePanel(S.frame);}raf=requestAnimationFrame(step);}
+function play(){S.playing=true;if(!raf)raf=requestAnimationFrame(step);}
+
+document.querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>pressDigit(b.dataset.d));
+document.querySelectorAll("[data-op]").forEach(b=>b.onclick=()=>pressOp(b.dataset.op));
+document.querySelectorAll("[data-fn]").forEach(b=>b.onclick=()=>pressFn(b.dataset.fn));
+document.querySelectorAll(".movebtn").forEach(b=>b.onclick=()=>doMove(+b.dataset.c));
+$("eq").onclick=pressEq;$("clr").onclick=()=>{C.entry="0";C.stored=null;C.op=null;C.awaitB=false;setDisp("",0);};
+addEventListener("keydown",e=>{if(e.key>="0"&&e.key<="9")pressDigit(e.key);else if(e.key==="Enter"||e.key==="=")pressEq();
+  else if(e.key==="+")pressOp("add");else if(e.key==="-")pressOp("sub");else if(e.key==="*")pressOp("mul");else if(e.key==="/")pressOp("div");else if(e.key==="c"||e.key==="Escape")$("clr").click();});
+addEventListener("resize",()=>{layout();if(S.R)render(S.frame);});
+$("realtag").textContent=M.source.includes("real")?"REAL male-CNS connectome":M.source;
+$("foot").innerHTML=`<span class="pill">${N.toLocaleString()} real neurons</span><span class="pill">${M.n_synapses.toLocaleString()} synapses</span>`+
+  `<span class="pill">${M.movement_neurons} motor neurons</span><span class="pill">operands 0–99</span><br>`+
+  `<b>How it works:</b> each number is held as a sustained one-hot pattern on its own input neurons (gold). Signal flows through the real wiring; a trained readout (its learned output pathway) decodes the result — integers exactly, transcendental functions to 3 decimals, all within the 0–99 range it was trained on. The blue motor neurons are the fly's real movement hardware, kept intact.`;
+layout();runCompute("add",47,38,"47 + 38 =");

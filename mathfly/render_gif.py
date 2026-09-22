@@ -226,6 +226,69 @@ def render_calc_gif(bundle, op, a, b, out="viz/fly_solve.gif", W=560, H=396,
     return out
 
 
+def render_sci_gif(bundle, name, a, b=0, out="viz/fly_solve.gif", W=560, H=396,
+                   scale=2, fps=12, hold=8, colors=64):
+    """Render the scientific-calculator fly solving one problem."""
+    m = bundle["meta"]; N = m["N"]; alpha = m["alpha"]; gain = m["gain"]; steps = m["steps"]; rwin = m["read_win"]
+    pos = np.array(bundle["pos"], dtype=np.float32); sign = np.array(bundle["sign"])
+    slots = [[np.array(s) for s in slot] for slot in bundle["slot_sets"]]
+    read = np.array(bundle["read"]); motor = np.array(bundle["motor"])
+    e_pre = np.array(bundle["edges"]["pre"]); e_post = np.array(bundle["edges"]["post"]); e_w = np.array(bundle["edges"]["w"], dtype=np.float32)
+    op = bundle["ops"][name]; tr = bundle["trunk"]
+    u = np.zeros(N, dtype=np.float32)
+    for si, dg in enumerate([a // 10, a % 10]):
+        u[slots[si][dg]] += gain
+    in_neurons = set(np.concatenate([slots[0][a // 10], slots[1][a % 10]]).tolist())
+    if op["arity"] == 2:
+        for si, dg in enumerate([b // 10, b % 10]):
+            u[slots[2 + si][dg]] += gain
+        in_neurons |= set(np.concatenate([slots[2][b // 10], slots[3][b % 10]]).tolist())
+    x = np.zeros(N, dtype=np.float32); R = []
+    for t in range(steps):
+        r = np.tanh(x); rec = np.zeros(N, dtype=np.float32); np.add.at(rec, e_post, e_w * r[e_pre])
+        x = (1 - alpha) * x + alpha * (rec + u); R.append(np.tanh(x))
+    R = np.array(R)
+    feat = np.concatenate([R[steps - rwin:][:, read].mean(0), [1.0]]).astype(np.float32)
+    z = np.maximum(0, np.array(tr["W2"]) @ np.maximum(0, np.array(tr["W1"]) @ feat + np.array(tr["b1"])) + np.array(tr["b2"]))
+    o = np.array(op["W"]) @ z + np.array(op["hb"])
+    K = op["K"]; mag = sum(int(o[d * 10:d * 10 + 10].argmax()) * (10 ** i) for i, d in enumerate(range(K)))
+    val = mag / (10 ** op["dec"])
+    if op["signed"] and o[K * 10 + 1] > o[K * 10]:
+        val = -val
+    shown = f"{val:.{op['dec']}f}" if op["dec"] > 0 else str(int(round(val)))
+    disp = f"{a} {op['sym']} {b} =" if op["arity"] == 2 else f"{op['sym']}({a}) ="
+
+    Ws, Hs = W * scale, H * scale; padX, padY = 30 * scale, 74 * scale
+    XY = np.empty((N, 2)); XY[:, 0] = padX + pos[:, 0] * (Ws - 2 * padX); XY[:, 1] = padY + pos[:, 1] * (Hs - 2 * padY)
+    fbig = _font(28 * scale); fsmall = _font(15 * scale)
+    base = Image.new("RGB", (Ws, Hs), BG); ed = ImageDraw.Draw(base)
+    stride = max(1, len(e_w) // 2500)
+    for k in range(0, len(e_w), stride):
+        A = XY[e_pre[k]]; Bp = XY[e_post[k]]; ed.line([tuple(A), tuple(Bp)], fill=_lerp(BG, INH if e_w[k] < 0 else EXC, 0.09), width=1)
+    frames = []; seq = list(range(steps)) + [steps - 1] * hold
+    for fi, tt in enumerate(seq):
+        img = base.copy(); d = ImageDraw.Draw(img, "RGBA"); rt = R[tt]
+        for i in range(N):
+            act = abs(float(rt[i])); col = EXC if sign[i] >= 0 else INH
+            rad = (1.4 + act * 3.6) * scale; al = int((0.09 + act * 0.85) * 255); xx, yy = XY[i]
+            if act > 0.06:
+                gr = rad * 2.1; d.ellipse([xx - gr, yy - gr, xx + gr, yy + gr], fill=col + (int(al * 0.25),))
+            d.ellipse([xx - rad, yy - rad, xx + rad, yy + rad], fill=col + (al,))
+        for i in in_neurons:
+            xx, yy = XY[i]; rr = 3.0 * scale; d.ellipse([xx - rr, yy - rr, xx + rr, yy + rr], outline=GOLD + (150,), width=2)
+        for i in motor:
+            xx, yy = XY[i]; rr = 2.2 * scale; d.ellipse([xx - rr, yy - rr, xx + rr, yy + rr], outline=(138, 180, 255, 90), width=1)
+        in_read = tt >= steps - rwin; cur = shown if in_read else "?"
+        d.text((30 * scale, 20 * scale), disp, font=fbig, fill=INK); weq = d.textlength(disp, font=fbig)
+        d.text((30 * scale + weq + 14 * scale, 20 * scale), cur, font=fbig, fill=GOLD)
+        d.text((30 * scale, 56 * scale), "holding the numbers" if not in_read else "computing . . .", font=fsmall, fill=MUTED)
+        frames.append(img.resize((W, H), Image.LANCZOS).convert("P", palette=Image.ADAPTIVE, colors=colors))
+    os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
+    frames[0].save(out, save_all=True, append_images=frames[1:], loop=0, duration=int(1000 / fps), optimize=True, disposal=2)
+    print(f"[gif] wrote {out} ({os.path.getsize(out)/1e6:.2f} MB)  {disp} {shown}")
+    return out
+
+
 def _load_bundle(path, config):
     if path and os.path.exists(path):
         with open(path) as f:

@@ -151,6 +151,20 @@ def test_calc_fly_learns_table():
         assert "mlp" in bundle["tasks"][op]
 
 
+def test_sci_encode_decode_roundtrip():
+    """Fixed-point / signed output encoding must round-trip for every op."""
+    import math
+    from mathfly.sci_fly import OPS, encode_out, decode_out
+    cases = {"add": (47, 38), "sub": (12, 40), "mul": (7, 8), "div": (81, 9),
+             "square": (12,), "sqrt": (81,), "sin": (30,), "cos": (60,),
+             "log": (10,), "inv": (4,)}
+    for op in OPS:
+        val = op["fn"](*cases[op["name"]])
+        sign, digits = encode_out(op, val)
+        got = decode_out(op, sign, digits)
+        assert abs(got - round(val, op["dec"])) < 10 ** (-op["dec"]) / 2 + 1e-9, (op["name"], val, got)
+
+
 def test_gym_env_roundtrip():
     from mathfly.gym_env import make_env
     env = make_env({"synthetic_n": 300}, task_name="add_1digit",

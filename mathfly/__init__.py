@@ -42,3 +42,15 @@ def train_synapses(*args, **kwargs):
     """Lazy re-export: synapse-training (BPTT) on the real connectome (needs torch)."""
     from .synapse_train import train
     return train(*args, **kwargs)
+
+
+def CalcFly(*args, **kwargs):
+    """Lazy re-export: the calculator fly (real connectome -> single-digit maths)."""
+    from .calc_fly import CalcFly as _C
+    return _C(*args, **kwargs)
+
+
+def SciFly(*args, **kwargs):
+    """Lazy re-export: the scientific-calculator fly (real connectome, 0-99)."""
+    from .sci_fly import SciFly as _S
+    return _S(*args, **kwargs)
