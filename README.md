@@ -41,7 +41,7 @@ Expected output (a synthetic stand-in connectome, so you can develop offline):
 
 ## Watch it think 🧠
 
-![Math-Fly solving 7 × 8](viz/fly_solve.gif)
+![The real male-CNS fly comparing 80 > 20](viz/fly_solve.gif)
 
 Export a **standalone, interactive web page** where you type a problem and watch
 the fly's neurons fire as it solves it — teal for excitatory, rose for
