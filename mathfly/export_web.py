@@ -207,11 +207,17 @@ def reference_forward(bundle: dict, op: str, a: int, b: int):
     t2i = bundle["token2id"]
     pre = np.array(bundle["edges"]["pre"]); post = np.array(bundle["edges"]["post"])
     w = np.array(bundle["edges"]["w"], dtype=np.float32)
+    bias = np.array(bundle.get("bias", np.zeros(N)), dtype=np.float32)   # 0 for reservoir models
     tb = bundle["tasks"][op]
 
     if op == "-" and b > a:
         a, b = b, a
-    tokens = op_tokens(op, a, b)
+    pad = tb.get("pad_width")
+    if pad:                                    # fixed-width tokenisation (synapse-trained models)
+        tok_op = "-" if op == ">" else op
+        tokens = list(str(int(a)).rjust(pad, "0")) + [tok_op] + list(str(int(b)).rjust(pad, "0")) + ["="]
+    else:
+        tokens = op_tokens(op, a, b)
     T = (len(tokens) + settle) * spt
     U = np.zeros((T, N), dtype=np.float32)
     ti = 0
@@ -228,7 +234,7 @@ def reference_forward(bundle: dict, op: str, a: int, b: int):
         rr = np.tanh(x)
         rec = np.zeros(N, dtype=np.float32)
         np.add.at(rec, post, w * rr[pre])
-        x = (1 - alpha) * x + alpha * (rec + U[t]); R[t] = np.tanh(x)
+        x = (1 - alpha) * x + alpha * (rec + U[t] + bias); R[t] = np.tanh(x)
 
     win_start = T - settle * spt
     feat = np.concatenate([R[win_start:][:, rd].mean(0), [1.0]]).astype(np.float32)
@@ -282,6 +288,8 @@ def main():
     ap.add_argument("--config", help="JSON/YAML training config")
     ap.add_argument("--out", default="viz/fly_viz.html")
     ap.add_argument("--bundle-json", help="also write the raw bundle JSON here")
+    ap.add_argument("--male-cns", action="store_true",
+                    help="use the REAL male-CNS connectome subgraph (see scripts/download_male_cns.py)")
     ap.add_argument("--template", default=os.path.join(os.path.dirname(__file__),
                     "..", "viz", "fly_viz_template.html"))
     args = ap.parse_args()
@@ -290,6 +298,10 @@ def main():
     if args.config:
         with open(args.config) as f:
             config = json.load(f) if args.config.endswith(".json") else __import__("yaml").safe_load(f)
+    if args.male_cns:
+        config["male_cns"] = True
+        config.setdefault("n_readout", 800)
+        config.setdefault("spectral_radius", 1.15)
 
     model, enc, conn = train_for_viz(config)
     bundle = build_bundle(model, enc, conn)

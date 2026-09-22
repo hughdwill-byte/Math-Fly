@@ -313,6 +313,57 @@ silently drift from the real network. To visualise the **real** connectome,
 train with `configs/full_connectome.yaml` first (keep `max_neurons` in the low
 thousands so the page stays light) and re-export.
 
+## 6c. The real fly, and training its synapses
+
+Everything so far can run on a synthetic stand-in. Here's the real thing.
+
+### Get the real male-CNS connectome
+
+Janelia distributes the male-CNS v1.0 connectome as Arrow (`.feather`) flat
+files in a **public Google Cloud bucket** (`gs://flyem-male-cns/`) — no account
+or token needed. One command fetches it and builds a compact trainable subgraph:
+
+```bash
+pip install pyarrow pandas
+python scripts/download_male_cns.py --max-neurons 1200
+```
+
+This downloads the neuron annotations, the neurotransmitter predictions (which
+set each neuron's excitatory/inhibitory sign, Dale's law), and the ~0.5 GB
+body-to-body edge table (25.5M synaptic connections), then extracts the
+highest-degree subgraph and caches it to
+`data/connectome/male_cns_subgraph.npz` (~0.1 MB, committed with the repo). Any
+config with `male_cns: true` then uses the real fly.
+
+### Train just the readout (fast) or the synapses (BPTT)
+
+```bash
+# reservoir: fix the real wiring, train the readout heads (seconds)
+python -m mathfly.export_web --male-cns --out viz/fly_viz.html
+
+# synapse training: also learn a gain on every real synapse + a per-neuron
+# bias, by backprop-through-time (torch; minutes on CPU, faster on GPU)
+python -m mathfly.synapse_train --out viz/fly_viz.html
+```
+
+`synapse_train` first **warm-starts** the readout from the fast reservoir fit, so
+the printed "fixed synapses" line is the real baseline; it then trains the
+synapses and keeps the **best-so-far** weights, so it can never ship something
+worse than the fixed-wiring baseline.
+
+### What to expect (an honest result)
+
+The fly's real wiring is a **worse arithmetic engine than a same-size random
+network** — roughly +16% vs +43% on single-digit addition. That's not a bug: the
+connectome is optimised for being a fly, not for symbolic math. What the real fly
+*is* good at is **comparing quantities** (~76%), which is a genuinely
+fly-plausible behaviour (real flies discriminate "more vs. less"). And on CPU,
+short backprop-through-time matches but does not beat the reservoir baseline;
+surpassing it wants a GPU and a much longer run. The whole pipeline supports
+that — `--male-cns`, larger `--max-neurons`, a GPU (picked up automatically),
+more `--rounds` — but this guide won't pretend a CPU demo makes the real fly a
+calculator.
+
 ## 7. Extending the project
 
 Two of the biggest extensions are now built in — **digit-serial output**

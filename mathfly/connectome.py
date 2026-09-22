@@ -284,6 +284,14 @@ def load_connectome(config: dict) -> Connectome:
         spectral_radius                                     # rescale
     Falls back to synthetic if no real CSVs are found."""
     conn = None
+    # Real Drosophila male-CNS subgraph (cached .npz built by mathfly.male_cns).
+    mc = config.get("male_cns_cache", "data/connectome/male_cns_subgraph.npz")
+    if config.get("male_cns", False) and mc and os.path.exists(mc):
+        from .male_cns import load_subgraph
+        conn = load_subgraph(mc)
+        conn.rescale_spectral_radius(config.get("spectral_radius", 1.1))
+        return conn
+
     data_dir = config.get("data_dir", "data/connectome")
     if config.get("use_real", True) and os.path.isdir(data_dir):
         try:

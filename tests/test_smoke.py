@@ -95,6 +95,39 @@ def test_web_export_matches_model():
         assert ref_ans == py_ans, (op, a, b, ref_ans, py_ans)
 
 
+def test_synapse_export_matches_net():
+    """The exported synapse-trained bundle (with learned gains + per-neuron bias
+    + fixed-width tokens) must reproduce the torch model's predictions."""
+    import pytest
+    torch = pytest.importorskip("torch")
+    from mathfly.connectome import make_synthetic_connectome
+    from mathfly.io_encoding import IOEncoder
+    from mathfly import synapse_train as st
+    from mathfly.export_web import OPS, op_answer, reference_forward
+
+    conn = make_synthetic_connectome(n=300, seed=0).rescale_spectral_radius(1.1)
+    max_answer = max(op_answer(s["op"], s["hi"], s["hi"]) for s in OPS if s["op"] != ">")
+    enc = IOEncoder(conn.n, n_input=48, n_readout=120, n_answers=max_answer + 1,
+                    n_digits=3, steps_per_token=4, seed=0)
+    net = st._build_net(conn, enc, alpha=0.3)
+    st._warmstart(net, conn, enc, 200, np.random.default_rng(0))
+    acc = st._eval(net, enc, "cpu", n=40)
+    bundle = st.bundle_from_torch(net, enc, conn, acc)
+
+    net.eval()
+    for op, a, b in [("+", 8, 7), ("-", 9, 3), ("*", 6, 4), (">", 5, 9), ("*", 7, 7)]:
+        ref, *_ = reference_forward(bundle, op, a, b)
+        aa, bb = (b, a) if (op == "-" and b > a) else (a, b)
+        U = torch.tensor(enc.encode(st.fx_tokens(op, aa, bb))[None])
+        out = net(U, op)
+        if op == ">":
+            pred = int(out.argmax(1))
+        else:
+            dig = out.argmax(2)[0].numpy()
+            pred = int((dig * (10 ** np.arange(enc.n_digits))).sum())
+        assert ref == pred, (op, a, b, ref, pred)
+
+
 def test_gym_env_roundtrip():
     from mathfly.gym_env import make_env
     env = make_env({"synthetic_n": 300}, task_name="add_1digit",

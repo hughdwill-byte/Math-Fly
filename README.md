@@ -67,11 +67,37 @@ time** — you watch the answer's digits resolve on an odometer in the side pane
 Comparison (`>`) runs on full two-digit operands; `+ − ×` use smaller operands
 where the reservoir is genuinely competent but still produce multi-digit answers.
 
-Then swap in the **real** fly connectome:
+## The real fly, and training its synapses 🧬
+
+Everything above uses a synthetic stand-in. To use the **real Drosophila
+male-CNS connectome** (Janelia FlyEM v1.0 — 25.5M synapses, real cell types and
+neurotransmitter-based E/I signs), pull it from the public Google Cloud bucket
+(no account/token needed) and build a trainable subgraph:
 
 ```bash
-python scripts/download_connectome.py --manual        # how to get the data
-# or, with a free neuPrint token:
+pip install pyarrow pandas
+python scripts/download_male_cns.py --max-neurons 1200   # ~0.5 GB download, cached to a 0.1 MB subgraph
+```
+
+Then either train just the readout (fast, robust) or **train the synapses
+themselves** with backprop-through-time (torch — installed automatically):
+
+```bash
+python -m mathfly.export_web --male-cns --out viz/fly_viz.html     # reservoir readout on the real fly
+python -m mathfly.synapse_train --out viz/fly_viz.html             # + trains the synapse gains & bias
+```
+
+**An honest result worth knowing:** the fly's real wiring is a *worse* arithmetic
+engine than a same-size random network (~+16% vs +43% on addition) — it evolved
+to be a fly, not a calculator. What it *is* good at is **comparing quantities**
+(~76%), which is a genuinely fly-plausible behaviour. And on CPU, short
+backprop-through-time matches but doesn't beat the fixed-wiring readout (the
+trainer keeps the best-so-far, so it never ships worse); exceeding it wants a GPU
+and a long run. The pipeline is all there for that.
+
+The alternative neuPrint route (needs a free token) still works too:
+
+```bash
 python scripts/download_connectome.py --neuprint --max-neurons 20000
 python -m mathfly.train --mode reservoir --config configs/full_connectome.yaml
 ```
@@ -121,11 +147,16 @@ mathfly/
   train.py         training loop + CLI (reservoir | digits | bptt | rl)
   rl_train.py      REINFORCE trainer (network as reward-driven agent)
   evaluate.py      accuracy + sample predictions
+  male_cns.py      build a trainable subgraph from the REAL male-CNS connectome
+  synapse_train.py train the synapses (backprop-through-time) on the real fly
   export_web.py    export a trained model to the interactive visualiser
   render_gif.py    render a GIF of a solve (real dynamics) via Pillow
 scripts/
-  download_connectome.py   fetch real data (neuPrint API or manual steps)
+  download_male_cns.py     fetch the REAL connectome (public GCS bucket, no token)
+  download_connectome.py   alternative neuPrint route (needs a token)
   run_demo.py              end-to-end smoke demo
+data/connectome/
+  male_cns_subgraph.npz    the cached REAL fly subgraph (committed, ~0.1 MB)
 viz/
   fly_viz_template.html    the interactive brain player (weights injected in)
   fly_viz.html             generated standalone visualiser (open in a browser)

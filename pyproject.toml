@@ -16,7 +16,7 @@ dependencies = [
 
 [project.optional-dependencies]
 torch = ["torch>=2.0"]
-real = ["pandas>=2.0", "neuprint-python>=0.4"]
+real = ["pyarrow>=14.0", "pandas>=2.0", "neuprint-python>=0.4"]
 rl = ["gymnasium>=0.29"]
 viz = ["Pillow>=10.0"]
 dev = ["pytest>=7.0"]

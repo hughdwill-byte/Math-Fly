@@ -2,11 +2,15 @@
 data/connectome/*.csv
 data/**/*.parquet
 data/**/*.feather
+data/male_cns_raw/          # raw male-CNS feather files (hundreds of MB)
+# NOTE: data/connectome/male_cns_subgraph.npz IS committed (small, the real fly)
 
 # Training outputs
 runs/
 *.npz
 *.pt
+# ...but DO commit the real male-CNS subgraph (small; it's the real fly)
+!data/connectome/male_cns_subgraph.npz
 
 # Visualiser intermediate (the standalone viz/fly_viz.html embeds this)
 viz/fly_bundle.json

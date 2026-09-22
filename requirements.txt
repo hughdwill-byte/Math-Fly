@@ -9,9 +9,11 @@ PyYAML>=6.0
 # CPU wheel: pip install torch --index-url https://download.pytorch.org/whl/cpu
 torch>=2.0 ; extra == "torch"
 
-# Optional: pull the REAL male-CNS connectome from neuPrint.
-#   pip install neuprint-python pandas
+# Optional: pull the REAL male-CNS connectome.
+#   Recommended (public GCS bucket, no token): pip install pyarrow pandas
+pyarrow>=14.0 ; extra == "real"
 pandas>=2.0 ; extra == "real"
+#   Alternative neuPrint API route (needs a free token):
 neuprint-python>=0.4 ; extra == "real"
 
 # Optional: RL-style environments (mathfly.gym_env / --mode rl).

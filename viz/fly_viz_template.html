@@ -178,13 +178,17 @@ const N = M.N, ALPHA = M.alpha, SPT = M.steps_per_token, SETTLE = M.settle_token
 const EMBED = BUNDLE.embed, T2I = BUNDLE.token2id;
 const IN = BUNDLE.input_neurons, RD = BUNDLE.readout_neurons, SIGN = BUNDLE.sign, POS = BUNDLE.pos;
 const E_PRE = BUNDLE.edges.pre, E_POST = BUNDLE.edges.post, E_W = BUNDLE.edges.w, NE = E_W.length;
+const BIAS = BUNDLE.bias || null;               // per-neuron bias (synapse-trained models)
 const TASKS = BUNDLE.tasks;                     // keyed by op symbol
 
 // ---------------------------------------------- reservoir forward (mirrors Python)
+function pad(s,w){ s=String(s); while(s.length<w) s="0"+s; return s; }
 function tokenize(op, a, b){
-  const tok=[]; for(const c of String(a)) tok.push(c);
+  const t=TASKS[op], w=t&&t.pad_width;          // fixed-width for synapse-trained models
+  const A=w?pad(a,w):String(a), B=w?pad(b,w):String(b);
+  const tok=[]; for(const c of A) tok.push(c);
   tok.push(op===">" ? "-" : op);               // compare trained on "a - b ="
-  for(const c of String(b)) tok.push(c); tok.push("="); return tok;
+  for(const c of B) tok.push(c); tok.push("="); return tok;
 }
 function buildInput(tokens){
   const T=(tokens.length+SETTLE)*SPT, U=[], drive=[];
@@ -199,7 +203,7 @@ function run(tokens){
     const rPrev=new Float32Array(N); for(let i=0;i<N;i++) rPrev[i]=Math.tanh(x[i]);
     const rec=new Float32Array(N); for(let k=0;k<NE;k++) rec[E_POST[k]]+=E_W[k]*rPrev[E_PRE[k]];
     const uvec=U[t]; const xn=new Float32Array(N);
-    for(let i=0;i<N;i++) xn[i]=(1-ALPHA)*x[i]+ALPHA*rec[i];
+    for(let i=0;i<N;i++) xn[i]=(1-ALPHA)*x[i]+ALPHA*(rec[i]+(BIAS?BIAS[i]:0));
     for(let j=0;j<IN.length;j++) xn[IN[j]]+=ALPHA*(uvec[j]*GAIN);
     const rt=new Float32Array(N); for(let i=0;i<N;i++) rt[i]=Math.tanh(xn[i]);
     R.push(rt); x=xn;
