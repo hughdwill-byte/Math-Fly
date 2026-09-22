@@ -1,0 +1,35 @@
+name: Deploy Math-Fly visualiser to GitHub Pages
+
+# Publishes docs/index.html (the scientific-calculator fly) to GitHub Pages.
+# One-time setup: repo Settings → Pages → Source: "GitHub Actions".
+# (Or, without Actions: Settings → Pages → Deploy from a branch → this branch → /docs.)
+
+on:
+  push:
+    branches: ["main", "claude/happy-einstein-rcm4lu"]
+    paths: ["docs/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deployment
+        uses: actions/deploy-pages@v4

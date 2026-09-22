@@ -364,6 +364,55 @@ that — `--male-cns`, larger `--max-neurons`, a GPU (picked up automatically),
 more `--rounds` — but this guide won't pretend a CPU demo makes the real fly a
 calculator.
 
+## 6d. The scientific-calculator fly
+
+The reservoir/synapse paths above top out ~15% on arithmetic because the fly's
+dynamics can't hold two *sequentially* presented numbers long enough to combine
+them. The fix (`mathfly/calc_fly.py`, then `mathfly/sci_fly.py`): present each
+number as a **sustained one-hot** pattern on its own input neurons (both held at
+once) and decode with a small trained readout — the fly's *learned output
+pathway*. That turns the real 5,000-neuron fly into a genuine calculator.
+
+```bash
+python scripts/download_male_cns.py --max-neurons 5000
+python -m mathfly.sci_fly --out viz/fly_viz.html
+```
+
+What you get (all measured, printed per operation):
+
+- **`+ − ` to 0–999** — they *generalise* (~91–93% held-out; the fly is
+  computing, not memorising).
+- **`× ÷` exact to 0–99, functions exact to 0–99** — memorised over the full
+  domain; `sin cos log 1/x √` decode to 3 decimals. `×` gets its own larger head
+  (a shared readout collapses multiplication).
+- **movement** — a readout on the fly's ~2,000 real motor/descending neurons
+  maps forward/left/right/stop to the right motor output (100%).
+
+### The visualiser (`viz/sci_fly_template.html`)
+
+- **Real anatomy.** Neurons are placed by their real soma coordinates
+  (`male_cns._soma_layout`, x-z frontal projection) — brain up top, ventral
+  nerve cord below, aspect preserved. Math lights up the brain; movement fires
+  the nerve cord.
+- **Expression evaluator.** A shunting-yard parser (precedence + parentheses)
+  breaks `2 + 3 × 4` into elementary steps the fly computes one at a time
+  (= 14, not 20), animating per step.
+- **Big × and ÷ (the fly as an ALU).** For operands beyond a primitive's exact
+  range, the calculator composes **long multiplication / division** — the fly
+  does every partial product, addition and subtraction; digit placement is
+  bookkeeping. `471 × 380`, `998001 ÷ 999`, … are all computed by the fly. Big
+  results compound the per-step accuracy (≈85–90% on 3-digit ×), stated in the
+  UI. See `addBig / subBig / mulBig / divBig` in the template.
+
+### Put it on the web (GitHub Pages)
+
+The exporter also writes `docs/index.html`. To serve it as a public page:
+
+- **Repo owner, one time:** Settings → Pages → Source → **GitHub Actions**
+  (the included `.github/workflows/pages.yml` then deploys on every push), *or*
+  **Deploy from a branch** → pick this branch → `/docs`.
+- It goes live at `https://<user>.github.io/Math-Fly/`.
+
 ## 7. Extending the project
 
 Two of the biggest extensions are now built in — **digit-serial output**

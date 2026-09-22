@@ -8,6 +8,11 @@ environment of arithmetic tasks that get progressively harder. You then train a
 small readout (or, optionally, the synaptic gains themselves) to turn the fly's
 circuitry into a calculator, and watch how far its capacity goes.
 
+**▶ Live demo:** <https://hughdwill-byte.github.io/Math-Fly/> — the real fly, in
+its true anatomy, working as a scientific calculator. *(One-time setup by the
+repo owner: Settings → Pages → Source → either "GitHub Actions", or "Deploy from
+a branch" → this branch → `/docs`. Then it's live at that URL.)*
+
 > **Read this first — what this is and isn't.** The connectome is a *wiring
 > diagram*, not a living, thinking brain. It contains no recorded activity and
 > no learned weights: it tells you the fly's neurons and synapses, not what the
@@ -54,7 +59,7 @@ The real 5,000-neuron fly behaves like a pocket scientific calculator, and the
 visualiser shows it in its **true anatomy** (soma coordinates — brain up top,
 ventral nerve cord below) evaluating **whole expressions with precedence**: type
 `2 + 3 × 4` and a shunting-yard parser breaks it into elementary steps the fly
-computes one at a time (= 14, not 20). Measured per operation:
+computes one at a time (= 14, not 20). Primitive accuracies, measured per op:
 
 | op | acc | range | | op | acc | range |
 |----|-----|-------|-|----|-----|-------|
@@ -64,13 +69,20 @@ computes one at a time (= 14, not 20). Measured per operation:
 | `÷` | 100% | 0–99 | | `log` | 100% | 1–99 |
 | `1/x`| 99% | 1–99 | | movement | 100% | — |
 
+**Multi-digit × and ÷ (any size):** the fly is exact only at small operations,
+so the calculator treats it as an **ALU** and composes bigger arithmetic the way
+you would by hand — long multiplication and long division, where the fly does
+*every* partial product, addition and subtraction (digit placement is just
+bookkeeping). So `471 × 380`, `998001 ÷ 999`, etc. are computed step by step by
+the real fly. Big results **compound the per-step accuracy** (≈85–90% end-to-end
+on 3-digit ×), which the UI states plainly — no faking.
+
 The honest design, all measured not assumed: **`+ −` genuinely generalise** to
-three digits (~98% on held-out pairs), so they reach 0–999; **`× ÷` and the
-functions can't generalise** (their tables are too large to memorise at 3-digit
-and don't compose), so they stay exact over 0–99; **`×` needs its own larger
-head** (a shared readout collapses it); transcendentals decode to 3 decimals
-(finite precision, like any calculator). Movement fires the real motor neurons
-in the nerve cord.
+three digits (~98% held-out), so they reach 0–999; **`× ÷` can't**, so their
+*direct* range is 0–99 and larger inputs go through the long-arithmetic
+composer; **`×` needs its own larger head** (a shared readout collapses it);
+transcendentals decode to 3 decimals. Movement fires the real motor neurons in
+the nerve cord.
 
 Export a **standalone, interactive web page** where you type a problem and watch
 the fly's neurons fire as it solves it — teal for excitatory, rose for
@@ -198,11 +210,13 @@ scripts/
 data/connectome/
   male_cns_subgraph.npz    the cached REAL fly subgraph (committed, ~0.1 MB)
 viz/
-  sci_fly_template.html    the scientific-calculator UI (keypad + functions + movement)
+  sci_fly_template.html    the scientific-calculator UI (anatomy, expressions, movement)
   calc_fly_template.html   the single-digit calculator-fly player
   fly_viz_template.html    the earlier token-stream player
   fly_viz.html             generated standalone visualiser (open in a browser)
   fly_solve.gif            generated animation of a solve
+docs/index.html            the visualiser, served by GitHub Pages (kept in sync)
+.github/workflows/pages.yml   auto-deploys docs/ to GitHub Pages
 configs/           quickstart, full_connectome, digits, bptt, rl (.yaml)
 tests/             pytest smoke tests (9, all green)
 GUIDE.md           ← full training guide (start here)

@@ -160,9 +160,9 @@ function render(frame){ctx.clearRect(0,0,CW,CH);
   ctx.strokeStyle="rgba(138,180,255,.32)";ctx.lineWidth=1;for(const i of MOTOR){const p=PTS[i];ctx.beginPath();ctx.arc(p[0],p[1],2,0,6.2832);ctx.stroke();}}
 
 // ---------- animation driver (robust, sequential) ----------
-const A={R:null,frame:0,inputSets:null,onDone:null};
+const A={R:null,frame:0,inputSets:null,onDone:null,adv:1};
 let running=false,tc=0,_lastR=null;const SPEED=3;
-function runAnim(R,inputSets,label,onDone){A.R=R;A.frame=0;A.inputSets=inputSets;A.onDone=onDone;_lastR=R;
+function runAnim(R,inputSets,label,onDone,quick){A.R=R;A.frame=0;A.inputSets=inputSets;A.onDone=onDone;A.adv=quick?5:1;_lastR=R;
   $("step").innerHTML=label;if(!running){running=true;requestAnimationFrame(tick);}}
 function tick(){
   if(!A.R){running=false;return;}
@@ -173,7 +173,7 @@ function tick(){
     if(A.R){requestAnimationFrame(tick);}else running=false;
     return;
   }
-  tc++;if(tc>=SPEED){tc=0;A.frame++;}
+  tc++;if(tc>=SPEED){tc=0;A.frame+=A.adv;}
   requestAnimationFrame(tick);
 }
 function lastR(){return _lastR;}
@@ -200,29 +200,71 @@ function accLine(name,maxOperand){const op=OPS[name];const nm={add:"addition",su
   if(maxOperand!=null&&maxOperand>op.a[1])s+=` — ${maxOperand} exceeds its range`;return s;}
 
 function clampB(op,b){return Math.min(op.b[1],Math.max(op.b[0],Math.round(b)));}
-function evalExpr(onDone){
-  const rpn=toRPN(tokenize(curExpr));const st=[];let ip=0;
-  function next(){
-    if(ip>=rpn.length){onDone(st.length?st[st.length-1]:0);return;}
-    const k=rpn[ip++];
-    if(k.t==="num"){st.push(k.v);next();return;}
+
+// ---------- the fly as an ALU: exact primitives, animated ----------
+// A single primitive fly operation, returned as a Promise so we can compose.
+function flyBin(name,a,b,quick){return new Promise(res=>{const op=OPS[name];const A2=clampToOp(op,a),B2=clampB(op,b),sets=binSets(A2,B2);
+  runAnim(dyn(drive(sets)),sets,`brain computing <b>${A2} ${op.sym} ${B2}</b>`,()=>res(decodeVal(op,lastR())),quick);});}
+function flyUn(name,a){return new Promise(res=>{const op=OPS[name];const A2=clampToOp(op,a),sets=unSets(A2);
+  runAnim(dyn(drive(sets)),sets,`brain computing <b>${op.sym}(${A2})</b>`,()=>res(decodeVal(op,lastR())));});}
+
+// Big-integer arithmetic composed from the fly's exact primitives -- the fly
+// does every real add/sub/mul; digit placement (×10ⁿ) is bookkeeping, exactly
+// as a person shifts columns in long multiplication.
+function setStage(s){$("step").innerHTML=s;}
+async function addBig(x,y){x=Math.round(x);y=Math.round(y);
+  if(x<=999&&y<=999)return await flyBin("add",x,y);
+  let carry=0,res=0,place=1;
+  while(x>0||y>0){const s=await flyBin("add",x%1000,y%1000,true);const t=s+carry;res+=(t%1000)*place;carry=Math.floor(t/1000);place*=1000;x=Math.floor(x/1000);y=Math.floor(y/1000);}
+  return res+carry*place;}
+async function subBig(x,y){x=Math.round(x);y=Math.round(y);
+  if(x<y)return -(await subBig(y,x));
+  if(x<=999&&y<=999)return await flyBin("sub",x,y);
+  let borrow=0,res=0,place=1;
+  while(x>0||y>0){let a=x%1000-borrow,b=y%1000;if(a<b){a+=1000;borrow=1;}else borrow=0;const d=await flyBin("sub",a,b,true);res+=d*place;place*=1000;x=Math.floor(x/1000);y=Math.floor(y/1000);}
+  return res;}
+async function mulBig(a,b){a=Math.round(a);b=Math.round(b);
+  if(a<=99&&b<=99)return await flyBin("mul",a,b);
+  const aH=Math.floor(a/100),aL=a%100,bH=Math.floor(b/100),bL=b%100;   // base-100 grid
+  const p4=await flyBin("mul",aL,bL,true),p3=await flyBin("mul",aL,bH,true),
+        p2=await flyBin("mul",aH,bL,true),p1=await flyBin("mul",aH,bH,true);
+  const mid=await addBig(p2,p3);
+  let r=await addBig(p1*10000,mid*100);r=await addBig(r,p4);return r;}
+async function divBig(a,b){a=Math.round(a);b=Math.round(b);if(b===0)return 0;
+  if(a<=99&&b<=99)return await flyBin("div",a,b);
+  const ds=String(a).split("");let rem=0,q="";
+  for(const ch of ds){rem=rem*10+(+ch);let qd=0;
+    while(rem>=b&&qd<9){rem=await subBig(rem,b);qd++;}   // subtract b (fly) while it fits
+    q+=qd;}
+  return parseInt(q)||0;}
+async function flyApply(name,a,b){const op=OPS[name];
+  if(name==="add")return await addBig(a,b);
+  if(name==="sub")return await subBig(a,b);
+  if(name==="mul")return await mulBig(a,b);
+  if(name==="div")return await divBig(a,b);
+  return await flyUn(name,a);}
+
+// evaluate an RPN stream, driving the fly for each operation (composed if big)
+async function evalExpr(){
+  const rpn=toRPN(tokenize(curExpr));const st=[];
+  for(const k of rpn){
+    if(k.t==="num"){st.push(k.v);continue;}
     const name=SYM2NAME[k.v],op=OPS[name];const b=st.pop(),a=st.pop();
-    const A2=clampToOp(op,a),B2=clampB(op,b),sets=binSets(A2,B2);
-    setDisp(curExpr,"…",accLine(name,Math.max(a,b)));
-    runAnim(dyn(drive(sets)),sets,`brain computing <b>${A2} ${op.sym} ${B2}</b>`,()=>{
-      const v=decodeVal(op,lastR());st.push(v);$("step").innerHTML=`${A2} ${op.sym} ${B2} = <b>${fmt(op,v)}</b>`;
-      setDisp(curExpr,fmt(op,v),accLine(name));next();});
+    const big=(a>op.a[1]||b>op.b[1]);
+    setDisp(curExpr,"…",accLine(name,big?null:Math.max(a,b))+(big?" · long "+({mul:"multiplication",div:"division",add:"addition",sub:"subtraction"}[name]):""));
+    const v=await flyApply(name,a,b);
+    st.push(v);setDisp(curExpr,String(Math.round(v)));$("step").innerHTML=`${a} ${op.sym} ${b} = <b>${Math.round(v)}</b>`;
   }
-  next();
-}
-function evaluate(){if(busy)return;if(!curExpr.trim())return;busy=true;
+  return st.length?st[st.length-1]:0;}
+
+async function evaluate(){if(busy)return;if(!curExpr.trim())return;busy=true;
   document.querySelectorAll(".movebtn").forEach(x=>x.classList.remove("on"));$("movestat").textContent="";
-  evalExpr(v=>{busy=false;const shown=Number.isInteger(v)?v:(+v).toFixed(3);curExpr=String(Math.round(v));
-    $("ans").textContent=shown;$("step").innerHTML=`answer <b>${shown}</b>`;});}
-function applyFn(name){if(busy)return;const op=OPS[name];if(!curExpr.trim())return;busy=true;
-  evalExpr(v=>{const a=clampToOp(op,v),sets=unSets(a);setDisp(`${op.sym}(${Math.round(v)})`,"…",accLine(name,v));
-    runAnim(dyn(drive(sets)),sets,`brain computing <b>${op.sym}(${a})</b>`,()=>{const r=decodeVal(op,lastR());busy=false;
-      curExpr=fmt(op,r);setDisp(`${op.sym}(${Math.round(v)})`,fmt(op,r),accLine(name));$("step").innerHTML=`answer <b>${fmt(op,r)}</b>`;});});}
+  const v=await evalExpr();busy=false;const shown=Number.isInteger(v)?v:(+v).toFixed(3);curExpr=String(Math.round(v));
+  $("ans").textContent=shown;$("step").innerHTML=`answer <b>${shown}</b>`;}
+async function applyFn(name){if(busy)return;const op=OPS[name];if(!curExpr.trim())return;busy=true;
+  const v=await evalExpr();const a=clampToOp(op,v);setDisp(`${op.sym}(${Math.round(v)})`,"…",accLine(name,v));
+  const r=await flyUn(name,a);busy=false;curExpr=fmt(op,r);
+  setDisp(`${op.sym}(${Math.round(v)})`,fmt(op,r),accLine(name));$("step").innerHTML=`answer <b>${fmt(op,r)}</b>`;}
 function doMove(c){if(busy)return;busy=true;document.querySelectorAll(".movebtn").forEach(x=>x.classList.toggle("on",+x.dataset.c===c));
   runAnim(dyn(drive([CMDS[c]])),null,'nerve cord: <b>motor neurons firing</b>',()=>{const f=feat(lastR(),MOTOR,STEPS-1);
     let bi=0,bv=-1e9;const o=mvec(B.movement.W_move,f);for(let i=0;i<o.length;i++)if(o[i]>bv){bv=o[i];bi=i;}
@@ -242,7 +284,7 @@ addEventListener("resize",()=>{layout();if(A.R)render(Math.min(A.frame,STEPS-1))
 $("realtag").textContent=M.source.includes("real")?"REAL male-CNS connectome":M.source;
 $("foot").innerHTML=`<span class="pill">${N.toLocaleString()} real neurons</span><span class="pill">${M.n_synapses.toLocaleString()} synapses</span>`+
   `<span class="pill">${M.movement_neurons} motor neurons</span><span class="pill">real anatomy</span><br>`+
-  `<b>How it works:</b> the layout is the fly's real anatomy from soma coordinates — brain up top, ventral nerve cord below. Type an expression like <b>2 + 3 × 4</b>; a precedence parser breaks it into elementary steps and the real fly computes each one, its neurons firing per step. + − reach 999 (they generalise); × ÷ and functions are exact to 99. Movement fires the real motor neurons down in the nerve cord.`;
+  `<b>How it works:</b> the layout is the fly's real anatomy from soma coordinates — brain up top, ventral nerve cord below. Type an expression like <b>2 + 3 × 4</b>; a precedence parser breaks it into elementary steps and the fly computes each one, its neurons firing per step. The fly is exact at small operations (+ − to 999, × ÷ and functions to 99); for <b>bigger × and ÷</b> the calculator does long multiplication / division, with the fly doing every partial product, addition and subtraction — so big results compound the fly's per-step accuracy. Movement fires the real motor neurons in the nerve cord.`;
 layout();
 curExpr="2+3×4";setDisp("2 + 3 × 4",0);evaluate();   // open alive with a chained expression
 </script>
