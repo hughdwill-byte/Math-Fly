@@ -14,5 +14,9 @@ torch>=2.0 ; extra == "torch"
 pandas>=2.0 ; extra == "real"
 neuprint-python>=0.4 ; extra == "real"
 
-# Optional: RL-style environments if you extend beyond supervised tasks.
+# Optional: RL-style environments (mathfly.gym_env / --mode rl).
 gymnasium>=0.29 ; extra == "rl"
+
+# Optional: render a GIF of a solve (mathfly.render_gif). The interactive HTML
+# visualiser (mathfly.export_web) needs only the core numpy/scipy.
+Pillow>=10.0 ; extra == "viz"

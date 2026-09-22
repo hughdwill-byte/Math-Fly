@@ -18,6 +18,7 @@ dependencies = [
 torch = ["torch>=2.0"]
 real = ["pandas>=2.0", "neuprint-python>=0.4"]
 rl = ["gymnasium>=0.29"]
+viz = ["Pillow>=10.0"]
 dev = ["pytest>=7.0"]
 
 [project.scripts]

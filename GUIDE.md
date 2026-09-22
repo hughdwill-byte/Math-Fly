@@ -283,21 +283,35 @@ python -m mathfly.export_web --out viz/fly_viz.html
 What it does: it trains (or you can point it at a config), serialises the
 connectome + frozen recurrent weights + sensory embedding + trained readout
 heads into the page, and the page **re-runs the exact reservoir dynamics in
-JavaScript**. So it's not a canned animation — type `6 × 7`, hit *Ask the fly*,
-and you watch:
+JavaScript**. So it's not a canned animation — type a problem, hit *Ask the
+fly*, and you watch:
 
-- the digits and operator arrive as **timed pulses** on the gold sensory neurons,
+- each digit and the operator arrive as **timed pulses** on the gold sensory
+  neurons,
 - signal spread through the fly's fixed wiring (teal = excitatory, rose =
-  inhibitory), neuron by neuron,
-- the **readout resolve** during the "thinking" window into a final answer, with
-  a ✓/✗ against the true value (a small brain sometimes guesses wrong — that's
-  honest).
+  inhibitory), with **sparks travelling along the synapses** (toggle "signal
+  trails"); reduced-motion is respected,
+- the **readout resolve** during the "thinking" window — decoded **digit by
+  digit** on an odometer via the digit-serial heads, so multi-digit answers
+  work — with a ✓/✗ against the true value and the head's **real held-out
+  accuracy**, so nothing is oversold.
+
+Operand ranges per operator are chosen where a random-reservoir readout is
+genuinely competent: comparison (`>`) runs on full two-digit numbers; `+ − ×`
+use smaller operands (sequential digit-binding for multi-digit arithmetic is
+genuinely hard for a linear readout — see §6a) but still produce multi-digit
+answers on the reels.
+
+**Make a GIF.** `python -m mathfly.render_gif --op '*' --a 7 --b 8 --out
+viz/fly_solve.gif` renders the same real trajectory to a shareable loop (Pillow),
+with neurons, sparks, the token stream, and the answer resolving.
 
 Under the hood, `mathfly/export_web.py`'s `reference_forward()` is a NumPy mirror
 of the in-browser math, and a unit test asserts the two agree with the Python
-model — so the page can never silently drift from the real network. To visualise
-the **real** connectome, train with `configs/full_connectome.yaml` first (keep
-`max_neurons` in the low thousands so the page stays light) and re-export.
+model (for both the digit-serial and compare heads) — so the page can never
+silently drift from the real network. To visualise the **real** connectome,
+train with `configs/full_connectome.yaml` first (keep `max_neurons` in the low
+thousands so the page stays light) and re-export.
 
 ## 7. Extending the project
 

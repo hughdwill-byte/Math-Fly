@@ -41,22 +41,31 @@ Expected output (a synthetic stand-in connectome, so you can develop offline):
 
 ## Watch it think 🧠
 
+![Math-Fly solving 7 × 8](viz/fly_solve.gif)
+
 Export a **standalone, interactive web page** where you type a problem and watch
 the fly's neurons fire as it solves it — teal for excitatory, rose for
-inhibitory, gold for the sensory neurons the digits arrive on. The page embeds
-the real trained weights and re-runs the exact reservoir dynamics **in the
-browser**, so the answer you see emerge is the model's genuine output (it even
-shows a ✓/✗ — a small brain sometimes guesses wrong, which is real).
+inhibitory, gold for the sensory neurons the digits arrive on, and **sparks
+travelling along the synapses** as signal propagates. The page embeds the real
+trained weights and re-runs the exact reservoir dynamics **in the browser**, so
+the answer you see emerge is the model's genuine output (it shows a ✓/✗ and the
+head's real held-out accuracy — a small brain sometimes guesses wrong, which is
+real).
 
 ```bash
 python -m mathfly.export_web --out viz/fly_viz.html   # trains + builds the page
 # then just open viz/fly_viz.html in any browser
+
+# make a shareable GIF of a solve (real dynamics, not a mockup):
+python -m mathfly.render_gif --op '*' --a 7 --b 8 --out viz/fly_solve.gif
 ```
 
-*How to read it:* digits pulse into the gold sensory neurons (top-right stream),
-signal spreads through the fixed fly wiring, and during the "thinking" window the
-readout neurons' activity is decoded into the answer — which you watch resolve in
-the side panel.
+*How to read it:* each digit and the operator pulse into the gold sensory
+neurons (top-right stream), signal spreads through the fixed fly wiring, and
+during the "thinking" window the readout is decoded **one decimal place at a
+time** — you watch the answer's digits resolve on an odometer in the side panel.
+Comparison (`>`) runs on full two-digit operands; `+ − ×` use smaller operands
+where the reservoir is genuinely competent but still produce multi-digit answers.
 
 Then swap in the **real** fly connectome:
 
@@ -113,12 +122,14 @@ mathfly/
   rl_train.py      REINFORCE trainer (network as reward-driven agent)
   evaluate.py      accuracy + sample predictions
   export_web.py    export a trained model to the interactive visualiser
+  render_gif.py    render a GIF of a solve (real dynamics) via Pillow
 scripts/
   download_connectome.py   fetch real data (neuPrint API or manual steps)
   run_demo.py              end-to-end smoke demo
 viz/
   fly_viz_template.html    the interactive brain player (weights injected in)
   fly_viz.html             generated standalone visualiser (open in a browser)
+  fly_solve.gif            generated animation of a solve
 configs/           quickstart, full_connectome, digits, bptt, rl (.yaml)
 tests/             pytest smoke tests (9, all green)
 GUIDE.md           ← full training guide (start here)

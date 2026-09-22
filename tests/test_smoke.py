@@ -74,36 +74,25 @@ def test_digit_serial_learns():
 
 def test_web_export_matches_model():
     """The browser forward pass (reference_forward, a mirror of the JS) must
-    reproduce the Python ReservoirModel's own predictions exactly."""
-    from mathfly.export_web import build_bundle, reference_forward, VIZ_TASKS
-    from mathfly.io_encoding import IOEncoder, tokenize_problem
-    from mathfly.connectome import load_connectome
-    from mathfly.model import ReservoirModel
-    from mathfly.envs import CURRICULUM_BY_NAME, make_dataset
-    import numpy as np
+    reproduce the Python ReservoirModel's own predictions exactly -- for both
+    the digit-serial heads (+, -, *) and the single compare head (>)."""
+    from mathfly.export_web import (train_for_viz, build_bundle, reference_forward,
+                                    op_tokens)
 
-    config = {"synthetic_n": 400, "synthetic_density": 0.03, "spectral_radius": 1.1,
-              "n_readout": 200, "seed": 0}
-    conn = load_connectome(config)
-    max_answer = max(CURRICULUM_BY_NAME[t].max_answer for t in VIZ_TASKS) + 1
-    enc = IOEncoder(conn.n, n_readout=200, n_answers=max_answer, seed=0)
-    model = ReservoirModel(conn, enc, seed=0)
-    # train the readout heads used by the viz
-    for name in ["add_1digit", "sub_1digit", "mul_1digit"]:
-        task = CURRICULUM_BY_NAME[name]
-        probs, ans = make_dataset(task, 200, seed=0)
-        X = np.stack([model.features(p) for p in probs])
-        Y = np.stack([enc.target_onehot(a) for a in ans])
-        model.fit_readout(X, Y, name=name)
+    model, enc, conn = train_for_viz({"synthetic_n": 400, "n_readout": 200,
+                                      "n_train": 300, "seed": 0})
+    bundle = build_bundle(model, enc, conn)
 
-    bundle = build_bundle(model, enc, conn, tasks=["add_1digit", "sub_1digit", "mul_1digit"])
-    for name, a, b in [("add_1digit", 3, 4), ("sub_1digit", 8, 5), ("mul_1digit", 6, 7)]:
-        ref_ans, *_ = reference_forward(bundle, name, a, b)
-        model.select(name)
-        py_ans = model.predict(tokenize_problem(a if not (name=="sub_1digit" and b>a) else a,
-                                                 {"add_1digit":"+","sub_1digit":"-","mul_1digit":"*"}[name],
-                                                 b))
-        assert ref_ans == py_ans, (name, a, b, ref_ans, py_ans)
+    for op, a, b in [("+", 47, 38), ("-", 63, 29), ("*", 7, 8), (">", 5, 9),
+                     ("+", 9, 6), ("-", 4, 4)]:
+        ref_ans, *_ = reference_forward(bundle, op, a, b)
+        aa, bb = (b, a) if (op == "-" and b > a) else (a, b)
+        toks = op_tokens(op, aa, bb)
+        if op == ">":
+            py_ans = model.predict(toks, name=op)
+        else:
+            py_ans = model.predict_number(toks, name=op)
+        assert ref_ans == py_ans, (op, a, b, ref_ans, py_ans)
 
 
 def test_gym_env_roundtrip():
