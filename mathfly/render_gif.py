@@ -264,8 +264,12 @@ def render_sci_gif(bundle, name, a, b=0, out="viz/fly_solve.gif", W=560, H=396,
     shown = f"{val:.{op['dec']}f}" if op["dec"] > 0 else str(int(round(val)))
     disp = f"{a} {op['sym']} {b} =" if op["arity"] == 2 else f"{op['sym']}({a}) ="
 
-    Ws, Hs = W * scale, H * scale; padX, padY = 30 * scale, 74 * scale
-    XY = np.empty((N, 2)); XY[:, 0] = padX + pos[:, 0] * (Ws - 2 * padX); XY[:, 1] = padY + pos[:, 1] * (Hs - 2 * padY)
+    Ws, Hs = W * scale, H * scale
+    # letterbox the anatomical layout (preserve aspect), leaving room for the header
+    x0, x1, y0, y1 = pos[:, 0].min(), pos[:, 0].max(), pos[:, 1].min(), pos[:, 1].max()
+    topPad = 84 * scale; s = min((Ws - 60 * scale) / (x1 - x0), (Hs - topPad - 30 * scale) / (y1 - y0))
+    ox = (Ws - (x1 - x0) * s) / 2; oy = topPad
+    XY = np.empty((N, 2)); XY[:, 0] = ox + (pos[:, 0] - x0) * s; XY[:, 1] = oy + (pos[:, 1] - y0) * s
     fbig = _font(28 * scale); fsmall = _font(15 * scale)
     base = Image.new("RGB", (Ws, Hs), BG); ed = ImageDraw.Draw(base)
     stride = max(1, len(e_w) // 2500)

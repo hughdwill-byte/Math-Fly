@@ -231,6 +231,7 @@ def build_bundle(fly, round_to=3):
     def r(a):
         return np.round(np.asarray(a, dtype=np.float64), round_to).tolist()
     W = fly.C.W.tocoo(); W1, b1, W2, b2 = fly.trunk_np
+    pos = np.array(fly.C.meta["pos"]) if fly.C.meta.get("pos") else spectral_layout(fly.C.W)
     ops = {}
     for op in OPS:
         e = dict(sym=op["sym"], arity=op["arity"], K=op["K"], dec=op["dec"], signed=op["signed"],
@@ -246,7 +247,7 @@ def build_bundle(fly, round_to=3):
         "meta": dict(N=int(fly.N), source=fly.C.source, alpha=fly.alpha, gain=fly.gain,
                      steps=fly.steps, read_win=fly.read_win, n_synapses=int(fly.C.W.nnz),
                      movement_neurons=int(fly.motor.size), digits_per_num=DPN),
-        "sign": fly.C.sign.astype(int).tolist(), "pos": r(spectral_layout(fly.C.W)),
+        "sign": fly.C.sign.astype(int).tolist(), "pos": r(pos),
         "edges": {"post": W.row.astype(int).tolist(), "pre": W.col.astype(int).tolist(), "w": r(W.data)},
         "slot_sets": [[s.astype(int).tolist() for s in slot] for slot in fly.slot_sets],
         "cmd_sets": [c.astype(int).tolist() for c in fly.cmd_sets],

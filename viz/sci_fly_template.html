@@ -1,5 +1,5 @@
 <title>Scientific Calculator Fly</title>
-<meta name="description" content="The real Janelia male-CNS fruit-fly connectome, wired into a scientific calculator that evaluates full expressions with precedence — and still moves.">
+<meta name="description" content="The real Janelia male-CNS fruit-fly connectome, shown in its true anatomy, evaluating whole expressions one step at a time — and still able to move.">
 <style>
   :root{--bg:#060a12;--bg2:#0b1120;--panel:#0e1626;--panel2:#111c30;--line:#1c2a44;
     --ink:#e8eef9;--muted:#8ba0c2;--faint:#5a6f92;--exc:#37e0c6;--inh:#ff5f8d;--accent:#ffce54;
@@ -12,27 +12,28 @@
   header.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 14px;margin-bottom:6px;}
   .brand{display:flex;align-items:center;gap:10px;}.brand .fly{font-size:26px;filter:drop-shadow(0 0 10px rgba(55,224,198,.5));}
   h1{font-size:clamp(20px,3.4vw,30px);font-weight:700;letter-spacing:-.01em;margin:0;text-wrap:balance;}
-  .sub{color:var(--muted);font-size:13px;margin-left:auto;max-width:48ch;text-align:right;}.sub b{color:var(--exc);font-weight:600;}
+  .sub{color:var(--muted);font-size:13px;margin-left:auto;max-width:46ch;text-align:right;}.sub b{color:var(--exc);font-weight:600;}
   .real{display:inline-block;font-family:var(--mono);font-size:11px;color:#0b1220;background:var(--exc);border-radius:999px;padding:2px 9px;margin-bottom:12px;font-weight:700;}
-  .stage{display:grid;grid-template-columns:1fr 340px;gap:16px;}@media(max-width:860px){.stage{grid-template-columns:1fr;}}
-  .brainbox{position:relative;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:radial-gradient(120% 120% at 50% 0,#0c1524 0,#070c15 70%);min-height:480px;}
+  .stage{display:grid;grid-template-columns:1fr 330px;gap:16px;}@media(max-width:860px){.stage{grid-template-columns:1fr;}}
+  .brainbox{position:relative;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:radial-gradient(120% 90% at 50% 15%,#0c1524 0,#070c15 72%);min-height:560px;}
   canvas#brain{display:block;width:100%;height:100%;}
-  .phase{position:absolute;top:12px;left:14px;font-family:var(--mono);font-size:13px;color:var(--muted);background:rgba(6,10,18,.55);border:1px solid var(--line);border-radius:999px;padding:5px 12px;backdrop-filter:blur(4px);max-width:80%;}
-  .phase b{color:var(--accent);}
-  .legend{position:absolute;bottom:10px;left:14px;display:flex;flex-wrap:wrap;gap:12px;font-size:11px;color:var(--faint);}
+  .status{position:absolute;top:12px;left:0;right:0;text-align:center;pointer-events:none;}
+  .status .step{display:inline-block;font-family:var(--mono);font-size:15px;color:var(--ink);background:rgba(6,10,18,.7);border:1px solid var(--line);border-radius:999px;padding:6px 16px;backdrop-filter:blur(4px);}
+  .status .step b{color:var(--accent);}
+  .legend{position:absolute;bottom:10px;left:0;right:0;display:flex;justify-content:center;flex-wrap:wrap;gap:14px;font-size:11px;color:var(--faint);}
   .legend span{display:flex;align-items:center;gap:6px;}.dot{width:9px;height:9px;border-radius:50%;}
   .calc{border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,var(--panel2),var(--panel));padding:14px;display:flex;flex-direction:column;gap:10px;}
-  .disp{background:#070d18;border:1px solid var(--line);border-radius:12px;padding:12px 14px;text-align:right;min-height:82px;display:flex;flex-direction:column;justify-content:center;gap:2px;}
+  .disp{background:#070d18;border:1px solid var(--line);border-radius:12px;padding:12px 14px;text-align:right;min-height:84px;display:flex;flex-direction:column;justify-content:center;gap:2px;}
   .expr{font-family:var(--mono);font-size:16px;color:var(--ink);min-height:22px;overflow-x:auto;white-space:nowrap;}
-  .ans{font-family:var(--mono);font-size:32px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;text-shadow:0 0 18px rgba(255,206,84,.3);line-height:1.1;overflow:hidden;text-overflow:ellipsis;}
+  .ans{font-family:var(--mono);font-size:34px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1.1;overflow:hidden;text-overflow:ellipsis;text-shadow:0 0 18px rgba(255,206,84,.3);}
   .accline{font-size:10px;color:var(--faint);text-align:right;min-height:14px;}
   .keys{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;}
   .fns{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;}
-  button.k{height:44px;border:1px solid var(--line);border-radius:11px;background:var(--key);color:var(--ink);font-family:var(--mono);font-size:17px;cursor:pointer;}
-  button.k:active{transform:translateY(1px);}button.k.op{color:var(--accent);}
+  button.k{height:44px;border:1px solid var(--line);border-radius:11px;background:var(--key);color:var(--ink);font-family:var(--mono);font-size:17px;cursor:pointer;user-select:none;}
+  button.k:hover{border-color:var(--faint);}button.k:active{transform:translateY(1px);}button.k.op{color:var(--accent);}
   button.k.fn{background:var(--fn);color:var(--good);font-size:14px;font-family:var(--ui);font-weight:600;}
   button.k.eq{background:linear-gradient(180deg,#ffe08a,var(--accent));color:#12203a;font-weight:700;}
-  button.k.clr{color:var(--bad);}button.k.wide{grid-column:span 2;}
+  button.k.clr{color:var(--bad);}
   button:focus-visible{outline:2px solid var(--exc);outline-offset:2px;}
   .move{border-top:1px solid var(--line);padding-top:10px;}
   .move h3{margin:0 0 7px;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);font-weight:600;}
@@ -47,14 +48,14 @@
 <div class="wrap">
   <header class="top">
     <div class="brand"><span class="fly">🪰</span><div><h1>Scientific Calculator Fly</h1></div></div>
-    <div class="sub">The <b>real male-CNS connectome</b> evaluating whole expressions — with precedence — one elementary step at a time. Every dot is a real fly neuron.</div>
+    <div class="sub">The <b>real male-CNS connectome</b>, drawn in its true anatomy, evaluating whole expressions one elementary step at a time.</div>
   </header>
   <span class="real" id="realtag">real fly</span>
 
   <div class="stage">
     <div class="brainbox">
       <canvas id="brain"></canvas>
-      <div class="phase" id="phase">idle</div>
+      <div class="status"><span class="step" id="step">ready</span></div>
       <div class="legend">
         <span><i class="dot" style="background:var(--exc)"></i>excitatory</span>
         <span><i class="dot" style="background:var(--inh)"></i>inhibitory</span>
@@ -108,19 +109,16 @@ const SIGN=B.sign,POS=B.pos,SLOTS=B.slot_sets,CMDS=B.cmd_sets,READ=B.read,MOTOR=
 const E_PRE=B.edges.pre,E_POST=B.edges.post,E_W=B.edges.w,NE=E_W.length;
 const SYM2NAME={"+":"add","−":"sub","-":"sub","×":"mul","*":"mul","÷":"div","/":"div"};
 
-// ---- fly forward (mirrors mathfly.sci_fly) ----
-function digs(x){return [Math.floor(x/100),Math.floor(x/10)%10,x%10];}
-function runBin(a,b){const u=new Float32Array(N);
-  digs(a).forEach((dg,si)=>{for(const n of SLOTS[si][dg])u[n]+=GAIN;});
-  digs(b).forEach((dg,si)=>{for(const n of SLOTS[3+si][dg])u[n]+=GAIN;});
-  return dyn(u);}
-function runUn(a){const u=new Float32Array(N);digs(a).forEach((dg,si)=>{for(const n of SLOTS[si][dg])u[n]+=GAIN;});return dyn(u);}
-function runCmd(c){const u=new Float32Array(N);for(const n of CMDS[c])u[n]+=GAIN;return dyn(u);}
+// ---------- fly forward (mirrors mathfly.sci_fly) ----------
+function digs(x){x=Math.max(0,Math.round(x));return [Math.floor(x/100)%10,Math.floor(x/10)%10,x%10];}
 function dyn(u){let x=new Float32Array(N);const R=[];
   for(let t=0;t<STEPS;t++){const r=new Float32Array(N);for(let i=0;i<N;i++)r[i]=Math.tanh(x[i]);
     const rec=new Float32Array(N);for(let k=0;k<NE;k++)rec[E_POST[k]]+=E_W[k]*r[E_PRE[k]];
     const xn=new Float32Array(N);for(let i=0;i<N;i++)xn[i]=(1-ALPHA)*x[i]+ALPHA*(rec[i]+u[i]);
     const rt=new Float32Array(N);for(let i=0;i<N;i++)rt[i]=Math.tanh(xn[i]);R.push(rt);x=xn;}return R;}
+function binSets(a,b){const s=[];digs(a).forEach((d,i)=>s.push(SLOTS[i][d]));digs(b).forEach((d,i)=>s.push(SLOTS[3+i][d]));return s;}
+function unSets(a){const s=[];digs(a).forEach((d,i)=>s.push(SLOTS[i][d]));return s;}
+function drive(sets){const u=new Float32Array(N);for(const set of sets)for(const n of set)u[n]+=GAIN;return u;}
 function feat(R,neurons,upTo){const F=neurons.length,m=new Float32Array(F+1),lo=STEPS-RWIN,hi=Math.min(upTo+1,STEPS),cnt=Math.max(1,hi-lo);
   for(let t=lo;t<hi;t++){const rt=R[t];for(let j=0;j<F;j++)m[j]+=rt[neurons[j]];}for(let j=0;j<F;j++)m[j]/=cnt;m[F]=1;return m;}
 function mvec(Wr,x){const o=new Float32Array(Wr.length);for(let i=0;i<Wr.length;i++){let s=0;const w=Wr[i];for(let j=0;j<x.length;j++)s+=w[j]*x[j];o[i]=s;}return o;}
@@ -129,111 +127,122 @@ function relu(v){const o=new Float32Array(v.length);for(let i=0;i<v.length;i++)o
 function trunk(f){return relu(addb(mvec(TR.W2,relu(addb(mvec(TR.W1,f),TR.b1))),TR.b2));}
 function mlp(m,f){const h1=relu(addb(mvec(m.W1,f),m.b1)),h2=relu(addb(mvec(m.W2,h1),m.b2));return addb(mvec(m.W3,h2),m.b3);}
 function argseg(o,off){let bi=0,bv=-1e9;for(let i=0;i<10;i++)if(o[off+i]>bv){bv=o[off+i];bi=i;}return bi;}
-function headOut(op,R,upTo){const f=feat(R,READ,upTo);return op.kind==="trunk"?addb(mvec(op.W,trunk(f)),op.hb):mlp(op.mlp,f);}
-function decode(op,o){let mag=0;for(let d=0;d<op.K;d++)mag+=argseg(o,d*10)*Math.pow(10,d);
+function decodeVal(op,R){const f=feat(R,READ,STEPS-1);const o=op.kind==="trunk"?addb(mvec(op.W,trunk(f)),op.hb):mlp(op.mlp,f);
+  let mag=0;for(let d=0;d<op.K;d++)mag+=argseg(o,d*10)*Math.pow(10,d);
   let sign=op.signed&&o[op.K*10+1]>o[op.K*10]?-1:1;return sign*mag/Math.pow(10,op.dec);}
+function clampToOp(op,v){return Math.min(op.a[1],Math.max(op.a[0],Math.round(v)));}
+function fmt(op,v){return op&&op.dec>0?(+v).toFixed(op.dec):String(Math.round(v));}
 
-// ---- canvas ----
-const cv=$("brain"),ctx=cv.getContext("2d");let CW,CH,PTS=[],edgeCanvas=null;
+// ---------- anatomical canvas (letterboxed, aspect preserved) ----------
+const cv=$("brain"),ctx=cv.getContext("2d");let CW,CH,PTS=[],edgeCanvas=null,BOX=null;
 function layout(){const dpr=Math.min(2,devicePixelRatio||1),r=cv.parentElement.getBoundingClientRect();
-  CW=r.width;CH=Math.max(480,r.height);cv.width=CW*dpr;cv.height=CH*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
-  const px=26,py=30;PTS=POS.map(p=>[px+p[0]*(CW-2*px),py+p[1]*(CH-2*py)]);drawEdges();}
+  CW=r.width;CH=Math.max(560,r.height);cv.width=CW*dpr;cv.height=CH*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(const p of POS){x0=Math.min(x0,p[0]);x1=Math.max(x1,p[0]);y0=Math.min(y0,p[1]);y1=Math.max(y1,p[1]);}
+  const pad=30,s=Math.min((CW-2*pad)/(x1-x0),(CH-2*pad)/(y1-y0)),ox=(CW-(x1-x0)*s)/2,oy=(CH-(y1-y0)*s)/2;
+  PTS=POS.map(p=>[ox+(p[0]-x0)*s,oy+(p[1]-y0)*s]);
+  BOX={x0:ox,y0:oy,x1:ox+(x1-x0)*s,y1:oy+(y1-y0)*s};drawEdges();}
 function drawEdges(){const dpr=Math.min(2,devicePixelRatio||1);edgeCanvas=document.createElement("canvas");
   edgeCanvas.width=CW*dpr;edgeCanvas.height=CH*dpr;const ec=edgeCanvas.getContext("2d");ec.setTransform(dpr,0,0,dpr,0,0);ec.lineWidth=0.5;
-  const st=Math.max(1,Math.floor(NE/6000));for(let k=0;k<NE;k+=st){const A=PTS[E_PRE[k]],Bp=PTS[E_POST[k]];
-    ec.strokeStyle=E_W[k]<0?"rgba(255,95,141,0.045)":"rgba(55,224,198,0.045)";ec.beginPath();ec.moveTo(A[0],A[1]);ec.lineTo(Bp[0],Bp[1]);ec.stroke();}}
+  const st=Math.max(1,Math.floor(NE/7000));for(let k=0;k<NE;k+=st){const A=PTS[E_PRE[k]],Bp=PTS[E_POST[k]];
+    ec.strokeStyle=E_W[k]<0?"rgba(255,95,141,0.05)":"rgba(55,224,198,0.05)";ec.beginPath();ec.moveTo(A[0],A[1]);ec.lineTo(Bp[0],Bp[1]);ec.stroke();}
+  // faint region labels
+  ec.fillStyle="rgba(139,160,194,0.28)";ec.font="11px 'JetBrains Mono',monospace";ec.textAlign="center";
+  ec.fillText("B R A I N",(BOX.x0+BOX.x1)/2,BOX.y0+14);
+  ec.fillText("N E R V E   C O R D",(BOX.x0+BOX.x1)/2,BOX.y1-6);}
 function render(frame){ctx.clearRect(0,0,CW,CH);
   if(edgeCanvas){const dpr=Math.min(2,devicePixelRatio||1);ctx.drawImage(edgeCanvas,0,0,edgeCanvas.width/dpr,edgeCanvas.height/dpr);}
-  const R=S.R;ctx.globalCompositeOperation="lighter";
-  for(let i=0;i<N;i++){const act=R?Math.abs(R[frame][i]):0,base=SIGN[i]>=0?[55,224,198]:[255,95,141],p=PTS[i],rad=1.2+act*3.4,al=0.09+act*0.85;
-    if(act>0.12){ctx.shadowBlur=6+act*15;ctx.shadowColor=`rgba(${base[0]},${base[1]},${base[2]},${al})`;}else ctx.shadowBlur=0;
+  const R=A.R;ctx.globalCompositeOperation="lighter";
+  for(let i=0;i<N;i++){const act=R?Math.abs(R[frame][i]):0,base=SIGN[i]>=0?[55,224,198]:[255,95,141],p=PTS[i],rad=1.1+act*4.0,al=0.08+act*0.9;
+    if(act>0.10){ctx.shadowBlur=6+act*18;ctx.shadowColor=`rgba(${base[0]},${base[1]},${base[2]},${al})`;}else ctx.shadowBlur=0;
     ctx.fillStyle=`rgba(${base[0]},${base[1]},${base[2]},${al})`;ctx.beginPath();ctx.arc(p[0],p[1],rad,0,6.2832);ctx.fill();}
   ctx.shadowBlur=0;ctx.globalCompositeOperation="source-over";
-  if(S.activeSets){ctx.strokeStyle="rgba(255,206,84,.6)";ctx.lineWidth=1.4;for(const set of S.activeSets)for(const n of set){const p=PTS[n];ctx.beginPath();ctx.arc(p[0],p[1],3,0,6.2832);ctx.stroke();}}
-  ctx.strokeStyle="rgba(138,180,255,.3)";ctx.lineWidth=1;for(const i of MOTOR){const p=PTS[i];ctx.beginPath();ctx.arc(p[0],p[1],2.1,0,6.2832);ctx.stroke();}}
+  if(A.inputSets){ctx.strokeStyle="rgba(255,206,84,.7)";ctx.lineWidth=1.6;for(const set of A.inputSets)for(const n of set){const p=PTS[n];ctx.beginPath();ctx.arc(p[0],p[1],3.4,0,6.2832);ctx.stroke();}}
+  ctx.strokeStyle="rgba(138,180,255,.32)";ctx.lineWidth=1;for(const i of MOTOR){const p=PTS[i];ctx.beginPath();ctx.arc(p[0],p[1],2,0,6.2832);ctx.stroke();}}
 
-// ---- expression parsing (shunting-yard with precedence) ----
-function tokenize(str){const t=[];let i=0;str=str.replace(/[−]/g,"-").replace(/[×]/g,"*").replace(/[÷]/g,"/");
+// ---------- animation driver (robust, sequential) ----------
+const A={R:null,frame:0,inputSets:null,onDone:null};
+let running=false,tc=0,_lastR=null;const SPEED=3;
+function runAnim(R,inputSets,label,onDone){A.R=R;A.frame=0;A.inputSets=inputSets;A.onDone=onDone;_lastR=R;
+  $("step").innerHTML=label;if(!running){running=true;requestAnimationFrame(tick);}}
+function tick(){
+  if(!A.R){running=false;return;}
+  render(Math.min(A.frame,STEPS-1));
+  if(A.frame>=STEPS-1){                 // this step's animation is done
+    const cb=A.onDone;A.onDone=null;A.R=null;
+    if(cb)cb();                         // may start the next step via runAnim
+    if(A.R){requestAnimationFrame(tick);}else running=false;
+    return;
+  }
+  tc++;if(tc>=SPEED){tc=0;A.frame++;}
+  requestAnimationFrame(tick);
+}
+function lastR(){return _lastR;}
+
+// ---------- expression parsing (shunting-yard, precedence) ----------
+function tokenize(str){str=str.replace(/[−]/g,"-").replace(/[×]/g,"*").replace(/[÷]/g,"/");const t=[];let i=0;
   while(i<str.length){const c=str[i];
-    if(c>="0"&&c<="9"){let n="";while(i<str.length&&str[i]>="0"&&str[i]<="9"){n+=str[i++];}t.push({t:"num",v:+n});}
+    if(c>="0"&&c<="9"){let n="";while(i<str.length&&str[i]>="0"&&str[i]<="9")n+=str[i++];t.push({t:"num",v:+n});}
     else if("+-*/".includes(c)){t.push({t:"op",v:c});i++;}
-    else if(c==="("||c===")"){t.push({t:c});i++;}
-    else i++;}
-  return t;}
+    else if(c==="("||c===")"){t.push({t:c});i++;}else i++;}return t;}
 const PREC={"+":1,"-":1,"*":2,"/":2};
-function toRPN(tok){const out=[],ops=[];
-  for(const k of tok){
-    if(k.t==="num")out.push(k);
-    else if(k.t==="op"){while(ops.length&&ops[ops.length-1].t==="op"&&PREC[ops[ops.length-1].v]>=PREC[k.v])out.push(ops.pop());ops.push(k);}
-    else if(k.t==="(")ops.push(k);
-    else if(k.t===")"){while(ops.length&&ops[ops.length-1].t!=="(")out.push(ops.pop());ops.pop();}}
+function toRPN(tok){const out=[],ops=[];for(const k of tok){
+  if(k.t==="num")out.push(k);
+  else if(k.t==="op"){while(ops.length&&ops[ops.length-1].t==="op"&&PREC[ops[ops.length-1].v]>=PREC[k.v])out.push(ops.pop());ops.push(k);}
+  else if(k.t==="(")ops.push(k);
+  else if(k.t===")"){while(ops.length&&ops[ops.length-1].t!=="(")out.push(ops.pop());ops.pop();}}
   while(ops.length)out.push(ops.pop());return out;}
 
-// ---- state / animation ----
-const S={R:null,frame:0,playing:false,activeSets:null,queue:[],onDone:null,acc:0};
-let raf=null;
-function animate(runFn,activeSets,label,accTxt,onEnd){S.R=runFn();S.frame=0;S.activeSets=activeSets;S.label=label;S.accTxt=accTxt;S.onEnd=onEnd;play();}
-function play(){S.playing=true;if(!raf)raf=requestAnimationFrame(stepAnim);}
-function stepAnim(){if(!S.playing){raf=null;return;}S.acc++;if(S.acc>=3){S.acc=0;S.frame++;
-  if(S.frame>=STEPS){S.frame=STEPS-1;S.playing=false;render(S.frame);if(S.onEnd){const cb=S.onEnd;S.onEnd=null;cb();}return;}
-  render(S.frame);$("phase").innerHTML=S.label;}raf=requestAnimationFrame(stepAnim);}
+// ---------- evaluate an expression by driving the fly per step ----------
+let curExpr="",busy=false;
+function setDisp(expr,ans,acc){$("expr").textContent=expr||" ";if(ans!==undefined)$("ans").textContent=ans;$("acc").innerHTML=acc||"&nbsp;";}
+function accLine(name,maxOperand){const op=OPS[name];const nm={add:"addition",sub:"subtraction",mul:"multiplication",div:"division",square:"squares",sqrt:"√",sin:"sine",cos:"cosine",log:"log₁₀",inv:"1/x"}[name];
+  let s=`fly scores <b>${Math.round(op.accuracy*100)}%</b> on ${nm} (${op.a[0]}–${op.a[1]})`;
+  if(maxOperand!=null&&maxOperand>op.a[1])s+=` — ${maxOperand} exceeds its range`;return s;}
 
-function applyUnary(name,x,cb){const op=OPS[name];x=Math.min(op.a[1],Math.max(op.a[0],Math.round(x)));
-  animate(()=>runUn(x),[SLOTS[0][digs(x)[0]],SLOTS[1][digs(x)[1]],SLOTS[2][digs(x)[2]]],
-    `computing <b>${op.sym}(${x})</b>`,accFor(name),()=>{const R=S.R,o=headOut(op,R,STEPS-1),v=decode(op,o);cb(v);});}
-function applyBinary(name,a,b,cb){const op=OPS[name];
-  const A=Math.min(op.a[1],Math.max(op.a[0],Math.round(a))),Bb=Math.min(op.b[1],Math.max(op.b[0],Math.round(b)));
-  const sets=[SLOTS[0][digs(A)[0]],SLOTS[1][digs(A)[1]],SLOTS[2][digs(A)[2]],SLOTS[3][digs(Bb)[0]],SLOTS[4][digs(Bb)[1]],SLOTS[5][digs(Bb)[2]]];
-  animate(()=>runBin(A,Bb),sets,`computing <b>${A} ${op.sym} ${Bb}</b>`,accFor(name,Math.max(a,b)),()=>{const R=S.R,o=headOut(op,R,STEPS-1),v=decode(op,o);cb(v);});}
-function accFor(name,maxOperand){const op=OPS[name];let s=`fly scores <b>${Math.round(op.accuracy*100)}%</b> on ${name} (range ${op.a[0]}–${op.a[1]})`;
-  if(maxOperand!=null&&maxOperand>op.a[1])s+=` — value ${maxOperand} is past its range`;return s;}
-
-// evaluate an RPN stream by driving the fly for each op, in sequence
-function evalRPN(rpn,done){const st=[];let idx=0;
+function clampB(op,b){return Math.min(op.b[1],Math.max(op.b[0],Math.round(b)));}
+function evalExpr(onDone){
+  const rpn=toRPN(tokenize(curExpr));const st=[];let ip=0;
   function next(){
-    if(idx>=rpn.length){done(st.length?st[st.length-1]:0);return;}
-    const k=rpn[idx++];
-    if(k.t==="num"){st.push(k.v);next();}
-    else{const b=st.pop(),a=st.pop();const name=SYM2NAME[k.v];
-      applyBinary(name,a,b,(v)=>{st.push(v);setDisp(curExpr,fmt(OPS[name],v),S.accTxt);next();});}
+    if(ip>=rpn.length){onDone(st.length?st[st.length-1]:0);return;}
+    const k=rpn[ip++];
+    if(k.t==="num"){st.push(k.v);next();return;}
+    const name=SYM2NAME[k.v],op=OPS[name];const b=st.pop(),a=st.pop();
+    const A2=clampToOp(op,a),B2=clampB(op,b),sets=binSets(A2,B2);
+    setDisp(curExpr,"…",accLine(name,Math.max(a,b)));
+    runAnim(dyn(drive(sets)),sets,`brain computing <b>${A2} ${op.sym} ${B2}</b>`,()=>{
+      const v=decodeVal(op,lastR());st.push(v);$("step").innerHTML=`${A2} ${op.sym} ${B2} = <b>${fmt(op,v)}</b>`;
+      setDisp(curExpr,fmt(op,v),accLine(name));next();});
   }
   next();
 }
-
-// ---- calculator input ----
-let curExpr="";
-function fmt(op,v){return op&&op.dec>0?v.toFixed(op.dec):String(Math.round(v));}
-function setDisp(expr,ans,accTxt){$("expr").textContent=expr||" ";$("ans").textContent=ans;$("acc").innerHTML=accTxt||"&nbsp;";}
-function pressTok(t){curExpr+=t;setDisp(curExpr,$("ans").textContent);}
-function pressDigit(d){curExpr+=d;setDisp(curExpr,$("ans").textContent);}
-function pressFn(name){ // apply function to the whole current expression's value, or last number
-  evaluate(true,name);}
-function clearAll(){curExpr="";setDisp("",0);}
-function evaluate(isFn,fnName){
-  const tok=tokenize(curExpr);if(!tok.length&&!isFn)return;
-  const rpn=toRPN(tok);
+function evaluate(){if(busy)return;if(!curExpr.trim())return;busy=true;
   document.querySelectorAll(".movebtn").forEach(x=>x.classList.remove("on"));$("movestat").textContent="";
-  evalRPN(rpn,(val)=>{
-    if(isFn){applyUnary(fnName,val,(fv)=>{curExpr=String(fmt(OPS[fnName],fv));
-      $("expr").textContent=`${OPS[fnName].sym}(${Math.round(val)})`;$("ans").textContent=fmt(OPS[fnName],fv);$("acc").innerHTML=S.accTxt;});}
-    else{curExpr=String(fmt(OPS.add,val));$("ans").textContent=Number.isInteger(val)?val:val.toFixed(3);}
-  });
-}
-function doMove(c){document.querySelectorAll(".movebtn").forEach(x=>x.classList.toggle("on",+x.dataset.c===c));
-  animate(()=>runCmd(c),[CMDS[c]],'driving <b>motor neurons</b>','',()=>{const f=feat(S.R,MOTOR,STEPS-1);let bi=0,bv=-1e9;const o=mvec(B.movement.W_move,f);for(let i=0;i<o.length;i++)if(o[i]>bv){bv=o[i];bi=i;}$("movestat").innerHTML=`motor output → <b>${B.movement.commands[bi]}</b> ✓`;});}
+  evalExpr(v=>{busy=false;const shown=Number.isInteger(v)?v:(+v).toFixed(3);curExpr=String(Math.round(v));
+    $("ans").textContent=shown;$("step").innerHTML=`answer <b>${shown}</b>`;});}
+function applyFn(name){if(busy)return;const op=OPS[name];if(!curExpr.trim())return;busy=true;
+  evalExpr(v=>{const a=clampToOp(op,v),sets=unSets(a);setDisp(`${op.sym}(${Math.round(v)})`,"…",accLine(name,v));
+    runAnim(dyn(drive(sets)),sets,`brain computing <b>${op.sym}(${a})</b>`,()=>{const r=decodeVal(op,lastR());busy=false;
+      curExpr=fmt(op,r);setDisp(`${op.sym}(${Math.round(v)})`,fmt(op,r),accLine(name));$("step").innerHTML=`answer <b>${fmt(op,r)}</b>`;});});}
+function doMove(c){if(busy)return;busy=true;document.querySelectorAll(".movebtn").forEach(x=>x.classList.toggle("on",+x.dataset.c===c));
+  runAnim(dyn(drive([CMDS[c]])),null,'nerve cord: <b>motor neurons firing</b>',()=>{const f=feat(lastR(),MOTOR,STEPS-1);
+    let bi=0,bv=-1e9;const o=mvec(B.movement.W_move,f);for(let i=0;i<o.length;i++)if(o[i]>bv){bv=o[i];bi=i;}
+    busy=false;$("movestat").innerHTML=`motor output → <b>${B.movement.commands[bi]}</b> ✓`;$("step").innerHTML=`moved <b>${B.movement.commands[bi]}</b>`;});}
+function press(s){if(busy)return;curExpr+=s;setDisp(curExpr);}
 
-document.querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>pressDigit(b.dataset.d));
-document.querySelectorAll("[data-tok]").forEach(b=>b.onclick=()=>pressTok(b.dataset.tok));
-document.querySelectorAll("[data-fn]").forEach(b=>b.onclick=()=>pressFn(b.dataset.fn));
-document.querySelectorAll(".movebtn").forEach(b=>b.onclick=()=>doMove(+b.dataset.c));
-$("eq").onclick=()=>evaluate(false);$("clr").onclick=clearAll;
-addEventListener("keydown",e=>{if(e.key>="0"&&e.key<="9")pressDigit(e.key);
-  else if("+-*/()".includes(e.key))pressTok(e.key);
-  else if(e.key==="Enter"||e.key==="=")evaluate(false);
-  else if(e.key==="c"||e.key==="Escape")clearAll();else if(e.key==="Backspace"){curExpr=curExpr.slice(0,-1);setDisp(curExpr,$("ans").textContent);}});
-addEventListener("resize",()=>{layout();if(S.R)render(S.frame);});
+document.querySelectorAll("[data-d]").forEach(b=>b.addEventListener("click",()=>press(b.dataset.d)));
+document.querySelectorAll("[data-tok]").forEach(b=>b.addEventListener("click",()=>press(b.dataset.tok)));
+document.querySelectorAll("[data-fn]").forEach(b=>b.addEventListener("click",()=>applyFn(b.dataset.fn)));
+document.querySelectorAll(".movebtn").forEach(b=>b.addEventListener("click",()=>doMove(+b.dataset.c)));
+$("eq").addEventListener("click",evaluate);
+$("clr").addEventListener("click",()=>{if(busy)return;curExpr="";setDisp("",0,"");$("step").textContent="ready";});
+addEventListener("keydown",e=>{if(e.key>="0"&&e.key<="9")press(e.key);else if("+-*/()".includes(e.key))press(e.key);
+  else if(e.key==="Enter"||e.key==="=")evaluate();else if(e.key==="c"||e.key==="Escape")$("clr").click();
+  else if(e.key==="Backspace"){if(!busy){curExpr=curExpr.slice(0,-1);setDisp(curExpr);}}});
+addEventListener("resize",()=>{layout();if(A.R)render(Math.min(A.frame,STEPS-1));});
 $("realtag").textContent=M.source.includes("real")?"REAL male-CNS connectome":M.source;
 $("foot").innerHTML=`<span class="pill">${N.toLocaleString()} real neurons</span><span class="pill">${M.n_synapses.toLocaleString()} synapses</span>`+
-  `<span class="pill">${M.movement_neurons} motor neurons</span><span class="pill">expression evaluator</span><br>`+
-  `<b>How it works:</b> type an expression like <b>2 + 3 × 4</b>; a precedence parser breaks it into elementary steps and the real fly computes each one — you watch its neurons fire per step. + − work to 999 (they generalise), × ÷ and functions are exact to 99, transcendentals to 3 decimals. Blue motor neurons are the fly's real movement hardware, kept intact.`;
-layout();curExpr="2+3×4";setDisp("2 + 3 × 4",0);evaluate(false);
+  `<span class="pill">${M.movement_neurons} motor neurons</span><span class="pill">real anatomy</span><br>`+
+  `<b>How it works:</b> the layout is the fly's real anatomy from soma coordinates — brain up top, ventral nerve cord below. Type an expression like <b>2 + 3 × 4</b>; a precedence parser breaks it into elementary steps and the real fly computes each one, its neurons firing per step. + − reach 999 (they generalise); × ÷ and functions are exact to 99. Movement fires the real motor neurons down in the nerve cord.`;
+layout();
+curExpr="2+3×4";setDisp("2 + 3 × 4",0);evaluate();   // open alive with a chained expression
+</script>

@@ -138,13 +138,18 @@ def build_subgraph(raw_dir: str = "data/male_cns_raw",
     W = sparse.coo_matrix((data, (rows, cols)), shape=(n, n), dtype=np.float32)
     W.sum_duplicates(); W = W.tocsr()
 
+    # real anatomical layout from soma coordinates (x-z frontal projection:
+    # brain on top, ventral nerve cord below), aspect-ratio preserved
+    pos = _soma_layout(body_ids, anpath)
+
     # movement neurons: real motor/command neurons kept in the subgraph
     movement_idx = np.array([index[b] for b in forced if b in index], dtype=np.int64)
     conn = Connectome(W=W, sign=sign, body_ids=body_ids, types=types, source="real",
                       meta={"dataset": "male-cns-v1.0", "n_neurons": n,
                             "n_synapses": int(W.nnz), "max_neurons": max_neurons,
                             "min_synapses": min_synapses,
-                            "movement_idx": movement_idx.tolist()})
+                            "movement_idx": movement_idx.tolist(),
+                            "pos": pos.tolist()})
     n_inh = int((sign < 0).sum())
     if verbose:
         print(f"[male-cns] subgraph: {n} neurons, {W.nnz:,} edges, "
@@ -156,13 +161,45 @@ def build_subgraph(raw_dir: str = "data/male_cns_raw",
     return conn
 
 
+def _soma_layout(body_ids, anpath) -> np.ndarray:
+    """2D anatomical layout from real soma coordinates (x-z frontal projection:
+    brain up top, ventral nerve cord below), normalised to [0,1] with the true
+    aspect ratio preserved. Neurons without a soma are placed near a real one."""
+    import pyarrow.feather as feather
+    n = len(body_ids)
+    P = np.full((n, 3), np.nan)
+    if anpath:
+        an = feather.read_table(anpath, columns=["bodyId", "somaLocation"], memory_map=True).to_pandas()
+        loc = {int(b): v for b, v in zip(an["bodyId"], an["somaLocation"])
+               if v is not None and len(v) == 3}
+        for i, b in enumerate(body_ids):
+            if int(b) in loc:
+                P[i] = loc[int(b)]
+    rng = np.random.default_rng(0)
+    real = P[~np.isnan(P[:, 0])]
+    if len(real) == 0:                       # no soma info at all -> random blob
+        return rng.random((n, 2)).astype(np.float32)
+    for i in range(n):
+        if np.isnan(P[i, 0]):
+            P[i] = real[rng.integers(len(real))] + rng.normal(0, 1500, 3)
+    # frontal view: x = left-right, z = dorsal-ventral (brain up top, VNC below).
+    # Divide BOTH axes by the same scale so the true aspect ratio is preserved;
+    # the visualiser then letterboxes this into the canvas.
+    x, z = P[:, 0].copy(), P[:, 2].copy()
+    x -= x.min(); z -= z.min()
+    scale = max(x.max(), z.max()) or 1.0
+    x /= scale; z /= scale                    # z (long CNS axis) spans [0,1]
+    return np.stack([x, z], 1).astype(np.float32)
+
+
 def save_subgraph(conn: Connectome, path: str):
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     W = conn.W.tocoo()
     np.savez_compressed(path, row=W.row, col=W.col, data=W.data, n=conn.n,
                         sign=conn.sign, body_ids=conn.body_ids,
                         types=conn.types.astype(str),
-                        movement_idx=np.array(conn.meta.get("movement_idx", []), dtype=np.int64))
+                        movement_idx=np.array(conn.meta.get("movement_idx", []), dtype=np.int64),
+                        pos=np.array(conn.meta.get("pos", []), dtype=np.float32))
 
 
 def load_subgraph(path: str) -> Connectome:
@@ -171,11 +208,14 @@ def load_subgraph(path: str) -> Connectome:
     W = sparse.coo_matrix((d["data"], (d["row"], d["col"])), shape=(n, n),
                           dtype=np.float32).tocsr()
     mv = d["movement_idx"].tolist() if "movement_idx" in d.files else []
+    pos = d["pos"].tolist() if "pos" in d.files and len(d["pos"]) else None
+    meta = {"dataset": "male-cns-v1.0", "n_neurons": n, "n_synapses": int(W.nnz),
+            "movement_idx": mv}
+    if pos is not None:
+        meta["pos"] = pos
     return Connectome(W=W, sign=d["sign"].astype(np.float32),
                       body_ids=d["body_ids"], types=d["types"].astype(object),
-                      source="real",
-                      meta={"dataset": "male-cns-v1.0", "n_neurons": n,
-                            "n_synapses": int(W.nnz), "movement_idx": mv})
+                      source="real", meta=meta)
 
 
 def _find(d, keys):

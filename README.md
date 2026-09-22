@@ -41,31 +41,36 @@ Expected output (a synthetic stand-in connectome, so you can develop offline):
 
 ## Watch it think 🧠
 
-![The real male-CNS fly computing 7 × 8 = 56 as a scientific calculator](viz/fly_solve.gif)
+![The real male-CNS fly in its true anatomy, computing 7 × 8 = 56](viz/fly_solve.gif)
 
-### Scientific-calculator fly — the real fly as a pocket calculator (0–99)
+### Scientific-calculator fly — a real fly evaluating expressions
 
 ```bash
 python scripts/download_male_cns.py --max-neurons 5000
 python -m mathfly.sci_fly --out viz/fly_viz.html      # + - x /, x², √, sin, cos, log, 1/x
 ```
 
-Trained over the whole 0–99 domain, the real 5,000-neuron fly behaves like a
-pocket scientific calculator — measured per operation:
+The real 5,000-neuron fly behaves like a pocket scientific calculator, and the
+visualiser shows it in its **true anatomy** (soma coordinates — brain up top,
+ventral nerve cord below) evaluating **whole expressions with precedence**: type
+`2 + 3 × 4` and a shunting-yard parser breaks it into elementary steps the fly
+computes one at a time (= 14, not 20). Measured per operation:
 
-| op | acc | | op | acc |
-|----|-----|-|----|-----|
-| `+` | 100% | | `x²` | 100% |
-| `−` | 100% | | `√`  | 100% |
-| `×` | 100% | | `sin`| 100% |
-| `÷` | 99%  | | `cos`| 100% |
-| `1/x` | 99% | | `log`| 100% |
+| op | acc | range | | op | acc | range |
+|----|-----|-------|-|----|-----|-------|
+| `+` | 93% | 0–999 | | `x²` | 100% | 0–99 |
+| `−` | 91% | 0–999 | | `√`  | 100% | 0–99 |
+| `×` | 100% | 0–99 | | `sin`/`cos`| 100% | 0–99 |
+| `÷` | 100% | 0–99 | | `log` | 100% | 1–99 |
+| `1/x`| 99% | 1–99 | | movement | 100% | — |
 
-…plus **movement 100%** on its ~2,000 real motor neurons. Transcendental
-functions are decoded to 3 decimals (finite precision, like any calculator).
-Two design notes kept it honest: `+ −` genuinely *generalise* (95%+ on held-out
-pairs before full-domain training), and `×` needed its own dedicated head — a
-shared readout can't fit multiplication next to the other operations.
+The honest design, all measured not assumed: **`+ −` genuinely generalise** to
+three digits (~98% on held-out pairs), so they reach 0–999; **`× ÷` and the
+functions can't generalise** (their tables are too large to memorise at 3-digit
+and don't compose), so they stay exact over 0–99; **`×` needs its own larger
+head** (a shared readout collapses it); transcendentals decode to 3 decimals
+(finite precision, like any calculator). Movement fires the real motor neurons
+in the nerve cord.
 
 Export a **standalone, interactive web page** where you type a problem and watch
 the fly's neurons fire as it solves it — teal for excitatory, rose for
