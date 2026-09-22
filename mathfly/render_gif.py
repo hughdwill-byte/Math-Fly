@@ -153,6 +153,79 @@ def render_gif(bundle, op, a, b, out="viz/fly_solve.gif", W=560, H=396, scale=2,
     return out
 
 
+def render_calc_gif(bundle, op, a, b, out="viz/fly_solve.gif", W=560, H=396,
+                    scale=2, fps=12, hold=8, colors=64):
+    """Render the calculator-fly (sustained one-hot) solving one problem."""
+    m = bundle["meta"]
+    N = m["N"]; alpha = m["alpha"]; gain = m["gain"]; steps = m["steps"]; rwin = m["read_win"]
+    pos = np.array(bundle["pos"], dtype=np.float32); sign = np.array(bundle["sign"])
+    groups = [np.array(g) for g in bundle["groups"]]
+    read = np.array(bundle["read"]); motor = np.array(bundle["motor"])
+    e_pre = np.array(bundle["edges"]["pre"]); e_post = np.array(bundle["edges"]["post"])
+    e_w = np.array(bundle["edges"]["w"], dtype=np.float32)
+    bias = np.array(bundle.get("bias", np.zeros(N)), dtype=np.float32)
+    if op == "-" and b > a:
+        a, b = b, a
+    u = np.zeros(N, dtype=np.float32)
+    for n in groups[a]: u[n] += gain
+    for n in groups[10 + b]: u[n] += gain
+    x = np.zeros(N, dtype=np.float32); R = []
+    for t in range(steps):
+        r = np.tanh(x); rec = np.zeros(N, dtype=np.float32); np.add.at(rec, e_post, e_w * r[e_pre])
+        x = (1 - alpha) * x + alpha * (rec + u + bias); R.append(np.tanh(x))
+    R = np.array(R)
+    feat = np.concatenate([R[steps - rwin:][:, read].mean(0), [1.0]]).astype(np.float32)
+    t = bundle["tasks"][op]; mlp = t["mlp"]
+    h = np.maximum(0, np.array(mlp["W1"]) @ feat + np.array(mlp["b1"]))
+    o = np.array(mlp["W2"]) @ h + np.array(mlp["b2"])
+    if t["compare"]:
+        ans = int(np.argmax(o)); truth = int(a > b)
+        shown = "TRUE" if ans else "FALSE"; tshown = "TRUE" if truth else "FALSE"
+    else:
+        nd = m["n_digits"]; dd = o.reshape(nd, 10).argmax(1)
+        ans = int((dd * (10 ** np.arange(nd))).sum())
+        truth = {"+": a + b, "-": a - b, "*": a * b}[op]; shown = str(ans); tshown = str(truth)
+    disp_op = {"+": "+", "-": "−", "*": "×", ">": ">"}[op]
+
+    Ws, Hs = W * scale, H * scale; padX, padY = 30 * scale, 74 * scale
+    XY = np.empty((N, 2)); XY[:, 0] = padX + pos[:, 0] * (Ws - 2 * padX); XY[:, 1] = padY + pos[:, 1] * (Hs - 2 * padY)
+    fbig = _font(30 * scale); fsmall = _font(15 * scale)
+    base = Image.new("RGB", (Ws, Hs), BG); ed = ImageDraw.Draw(base)
+    stride = max(1, len(e_w) // 2500)
+    for k in range(0, len(e_w), stride):
+        A = XY[e_pre[k]]; Bp = XY[e_post[k]]; ed.line([tuple(A), tuple(Bp)], fill=_lerp(BG, INH if e_w[k] < 0 else EXC, 0.09), width=1)
+    in_neurons = set(groups[a].tolist()) | set(groups[10 + b].tolist())
+    frames = []
+    seq = list(range(steps)) + [steps - 1] * hold
+    for fi, tt in enumerate(seq):
+        img = base.copy(); d = ImageDraw.Draw(img, "RGBA"); rt = R[tt]
+        for i in range(N):
+            act = abs(float(rt[i])); col = EXC if sign[i] >= 0 else INH
+            rad = (1.4 + act * 3.6) * scale; al = int((0.09 + act * 0.85) * 255); xx, yy = XY[i]
+            if act > 0.06:
+                gr = rad * 2.1; d.ellipse([xx - gr, yy - gr, xx + gr, yy + gr], fill=col + (int(al * 0.25),))
+            d.ellipse([xx - rad, yy - rad, xx + rad, yy + rad], fill=col + (al,))
+        for i in in_neurons:
+            xx, yy = XY[i]; rr = 3.0 * scale; d.ellipse([xx - rr, yy - rr, xx + rr, yy + rr], outline=GOLD + (150,), width=2)
+        for i in motor:
+            xx, yy = XY[i]; rr = 2.2 * scale; d.ellipse([xx - rr, yy - rr, xx + rr, yy + rr], outline=(138, 180, 255, 90), width=1)
+        in_read = tt >= steps - rwin
+        cur = shown if in_read else "?"
+        eq = f"{a} {disp_op} {b} ="; d.text((30 * scale, 20 * scale), eq, font=fbig, fill=INK)
+        weq = d.textlength(eq, font=fbig)
+        col_ans = GOLD if (fi < len(seq) - hold or ans == truth) else (255, 107, 107)
+        d.text((30 * scale + weq + 14 * scale, 20 * scale), cur, font=fbig, fill=col_ans)
+        d.text((30 * scale, 58 * scale), "holding both numbers" if not in_read else "computing . . .", font=fsmall, fill=MUTED)
+        if tt == steps - 1 and fi >= len(seq) - hold:
+            vt = "correct" if ans == truth else f"true {tshown}"; vc = EXC if ans == truth else (255, 107, 107)
+            d.text((Ws - 30 * scale - d.textlength(vt, font=fsmall), 58 * scale), vt, font=fsmall, fill=vc)
+        frames.append(img.resize((W, H), Image.LANCZOS).convert("P", palette=Image.ADAPTIVE, colors=colors))
+    os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
+    frames[0].save(out, save_all=True, append_images=frames[1:], loop=0, duration=int(1000 / fps), optimize=True, disposal=2)
+    print(f"[gif] wrote {out} ({os.path.getsize(out)/1e6:.2f} MB)  real fly: {a}{op}{b} = {shown} ({'correct' if ans==truth else 'true '+tshown})")
+    return out
+
+
 def _load_bundle(path, config):
     if path and os.path.exists(path):
         with open(path) as f:

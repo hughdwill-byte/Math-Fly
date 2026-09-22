@@ -128,6 +128,29 @@ def test_synapse_export_matches_net():
         assert ref == pred, (op, a, b, ref, pred)
 
 
+def test_calc_fly_learns_table():
+    """The sustained one-hot calculator fly should master the single-digit
+    tables on a small connectome, and its bundle should round-trip."""
+    import pytest
+    pytest.importorskip("torch")
+    from mathfly.connectome import make_synthetic_connectome
+    from mathfly.calc_fly import CalcFly, build_bundle
+    from mathfly.render_gif import render_calc_gif  # import path sanity
+
+    conn = make_synthetic_connectome(n=900, seed=0).rescale_spectral_radius(1.15)
+    fly = CalcFly(conn, n_read=400, seed=0)
+    accs = fly.train(hidden=128, epochs=600, verbose=False)
+    # exhaustive over all 100 single-digit problems; should be near-perfect
+    assert accs["+"] > 0.9 and accs["*"] > 0.9 and accs[">"] > 0.9, accs
+    # Python decode matches the trained head
+    assert fly.predict("+", 7, 8) == 15
+    assert fly.predict("*", 6, 7) == 42
+    bundle = build_bundle(fly)
+    assert bundle["meta"]["N"] == conn.n and "movement" in bundle
+    for op in ["+", "-", "*", ">"]:
+        assert "mlp" in bundle["tasks"][op]
+
+
 def test_gym_env_roundtrip():
     from mathfly.gym_env import make_env
     env = make_env({"synthetic_n": 300}, task_name="add_1digit",
