@@ -162,7 +162,7 @@ function fmt(op,v){return op&&op.dec>0?(+v).toFixed(op.dec):String(Math.round(v)
 
 // ---------- anatomical canvas (letterboxed, aspect preserved) ----------
 const cv=$("brain"),ctx=cv.getContext("2d");let CW,CH,PTS=[],edgeCanvas=null,BOX=null,trailCanvas=null,trailCtx=null;
-const MAXDPR=1.5;   // cap the device-pixel-ratio: retina screens otherwise fill 4x the pixels every frame for no visible gain
+const MAXDPR=1.25;   // cap the device-pixel-ratio: retina screens otherwise fill 4x the pixels every frame for no visible gain
 function layout(){const dpr=Math.min(MAXDPR,devicePixelRatio||1),r=cv.parentElement.getBoundingClientRect();
   CW=r.width;CH=Math.max(560,r.height);cv.width=CW*dpr;cv.height=CH*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
   trailCanvas=document.createElement("canvas");trailCanvas.width=CW*dpr;trailCanvas.height=CH*dpr;
@@ -193,7 +193,7 @@ function makeGlow(rgb){const s=48,c=document.createElement("canvas");c.width=c.h
   grd.addColorStop(0,`rgba(${rgb},1)`);grd.addColorStop(0.28,`rgba(${rgb},0.55)`);grd.addColorStop(1,`rgba(${rgb},0)`);
   g.fillStyle=grd;g.fillRect(0,0,s,s);return c;}
 const GLOW=[makeGlow("55,224,198"),makeGlow("255,95,141")];
-function paint(act,showInputs,R,frame){ctx.clearRect(0,0,CW,CH);
+function paint(act,showInputs,R,frame,stride){stride=stride||1;ctx.clearRect(0,0,CW,CH);
   if(edgeCanvas)ctx.drawImage(edgeCanvas,0,0,edgeCanvas.width/DPR(),edgeCanvas.height/DPR());
   // --- signal sparks travel on a fading trail layer, so they leave streaks on the wires (only during a solve) ---
   if(FX&&trailCtx&&R){
@@ -208,11 +208,11 @@ function paint(act,showInputs,R,frame){ctx.clearRect(0,0,CW,CH);
   }
   // --- neurons: additive cached glow sprites (no per-neuron shadowBlur) ---
   // when nociception fires, painI surges every neuron and floods them rose.
-  const pf=painI;
+  const pf=painI,boost=stride>1?0.06:0;   // when decimating, nudge alpha so the field still reads as full
   ctx.globalCompositeOperation="lighter";
-  for(let i=0;i<N;i++){let a=act(i);if(pf>0.01)a+=pf*(0.45+0.55*((i*97)%7)/7);   // the whole brain hurts at once
+  for(let i=0;i<N;i+=stride){let a=act(i);if(pf>0.01)a+=pf*(0.45+0.55*((i*97)%7)/7);   // the whole brain hurts at once
     if(a<0.02)continue;const p=PTS[i],g=(pf>0.2)?GLOW[1]:GLOW[SIGN[i]>=0?0:1],rad=2.2+Math.min(1.4,a)*10;
-    ctx.globalAlpha=Math.min(1,0.1+a*0.9);ctx.drawImage(g,p[0]-rad,p[1]-rad,rad*2,rad*2);}
+    ctx.globalAlpha=Math.min(1,0.1+boost+a*0.9);ctx.drawImage(g,p[0]-rad,p[1]-rad,rad*2,rad*2);}
   // red wash: subtle while armed, intense on an error flash
   const wash=(PAIN?0.03:0)+0.16*pf;
   if(wash>0){ctx.fillStyle=`rgba(255,50,80,${wash})`;ctx.fillRect(0,0,CW,CH);}
@@ -234,16 +234,23 @@ function runAnim(R,inputSets,label,onDone,quick){A.R=R;A.frame=0;A.inputSets=inp
   $("step").innerHTML=label;}
 // The loop is frame-rate capped (idle 30fps, solving 40fps) and pauses entirely when the
 // tab is hidden or the brain is scrolled off-screen, so it never pegs a CPU in the background.
-let _last=0,paused=false;
+let _last=0,paused=false,lastActive=(typeof performance!=="undefined"?performance.now():Date.now());
+const IDLE_SLEEP=12000;   // after 12s with no interaction (and nothing solving) the idle animation settles to a still frame
+function wake(){lastActive=(typeof performance!=="undefined"?performance.now():Date.now());if(!A.R&&staticDrawn)staticDrawn=false;}
 function loop(ts){requestAnimationFrame(loop);
   if(paused)return;
-  const minDt=1000/(A.R?40:30);if(ts-_last<minDt)return;_last=ts;
+  const solving=!!A.R;
+  // idle animation sleeps when unattended — this is what stops the GPU running hot while you just read the page
+  const asleep=!solving&&painI<=0&&!PAIN&&(ts-lastActive)>IDLE_SLEEP;
+  const minDt=1000/(solving?40:asleep?4:20);   // solve 40fps · idle 20fps · asleep ~4fps
+  if(ts-_last<minDt)return;_last=ts;
   clock++;
   if(painI>0){painI*=0.9;if(painI<0.01){painI=0;staticDrawn=false;}}   // error flash decays away
-  if(A.R){staticDrawn=false;const f=Math.min(A.frame,STEPS-1);paint(i=>Math.abs(A.R[f][i]),true,A.R,f);
+  if(solving){staticDrawn=false;const f=Math.min(A.frame,STEPS-1);paint(i=>Math.abs(A.R[f][i]),true,A.R,f);
     if(A.frame>=STEPS-1){const cb=A.onDone;A.onDone=null;A.R=null;if(cb)cb();}
     else{tc++;if(tc>=SPEED){tc=0;A.frame+=A.adv;}}}
-  else if(FX||painI>0||PAIN)paint(ambientAct,false,null,0);   // idle shimmer + heartbeat (kept live while pain is armed/flashing)
+  else if(asleep){if(!staticDrawn){paint(calmAct,false,null,0);staticDrawn=true;}}   // settle to a still frame; wakes on interaction
+  else if(FX||painI>0||PAIN)paint(ambientAct,false,null,0,2);   // idle shimmer + heartbeat, decimated (every 2nd neuron)
   else if(!staticDrawn){paint(calmAct,false,null,0);staticDrawn=true;}   // calm view: draw once, then hold
 }
 function lastR(){return _lastR;}
@@ -401,6 +408,8 @@ addEventListener("keydown",e=>{if(e.key>="0"&&e.key<="9")press(e.key);else if("+
   else if(e.key==="Enter"||e.key==="=")evaluate();else if(e.key==="c"||e.key==="Escape")$("clr").click();
   else if(e.key==="Backspace"){if(!busy){curExpr=curExpr.slice(0,-1);setDisp(curExpr);}}});
 addEventListener("resize",()=>{layout();staticDrawn=false;});
+// any interaction wakes the idle animation back up (it sleeps when unattended to spare the GPU)
+["pointerdown","pointermove","keydown","wheel","touchstart"].forEach(ev=>addEventListener(ev,wake,{passive:true}));
 // effects on/off — default off if the viewer prefers reduced motion
 const reduced=matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches;
 FX=!reduced;$("fx").checked=FX;
