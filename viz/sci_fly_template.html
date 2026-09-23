@@ -37,6 +37,18 @@
   .chklab{color:var(--faint);letter-spacing:.02em;}
   .chkval{margin-left:auto;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);}
   .chkval .ok{color:var(--good);font-weight:700;}.chkval .bad{color:var(--bad);font-weight:700;}.chkval small{color:var(--faint);font-weight:400;}
+  .brand .fly{cursor:pointer;}
+  .painbtn{display:none;width:100%;height:38px;border:1px solid #7a1327;border-radius:11px;
+    background:linear-gradient(180deg,#3a0b14,#26070d);color:#ff6b6b;font-family:var(--mono);font-size:12px;font-weight:700;
+    letter-spacing:.1em;text-transform:uppercase;cursor:pointer;box-shadow:0 0 0 rgba(255,60,90,0);transition:box-shadow .3s,border-color .3s;}
+  .painbtn.show{display:block;}
+  .painbtn.on{border-color:#ff5f8d;color:#ff9db4;background:linear-gradient(180deg,#5a0f1d,#360a12);box-shadow:0 0 18px rgba(255,60,90,.5);}
+  .toast{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);max-width:82%;text-align:center;z-index:6;
+    background:rgba(38,7,13,.94);border:1px solid #7a1327;color:#ffd4d4;font-size:13px;line-height:1.55;
+    padding:14px 18px;border-radius:14px;opacity:0;pointer-events:none;transition:opacity .35s;backdrop-filter:blur(4px);}
+  .toast.show{opacity:1;}.toast b{color:#ff8fa3;}
+  @keyframes shake{0%,100%{transform:translateX(0)}15%{transform:translateX(-7px)}30%{transform:translateX(7px)}45%{transform:translateX(-5px)}60%{transform:translateX(5px)}75%{transform:translateX(-3px)}}
+  .brainbox.hurt{animation:shake .4s ease-in-out;}
   .keys{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;}
   .fns{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;}
   button.k{height:44px;border:1px solid var(--line);border-radius:11px;background:var(--key);color:var(--ink);font-family:var(--mono);font-size:17px;cursor:pointer;user-select:none;}
@@ -73,6 +85,7 @@
         <span><i class="dot" style="background:var(--accent)"></i>number input</span>
         <span><i class="dot" style="background:var(--motor)"></i>motor neuron</span>
       </div>
+      <div class="toast" id="toast"></div>
     </div>
 
     <aside class="calc">
@@ -83,6 +96,7 @@
       <div class="accline" id="acc">&nbsp;</div>
       <label class="chkrow" title="Turn on an ordinary calculator that independently checks whether the fly's answer is correct">
         <input type="checkbox" id="chk"><span class="chklab">✓ checker</span><span class="chkval" id="chkval">off</span></label>
+      <button class="painbtn" id="painbtn" title="nociception">⚡ nociception</button>
       <div class="fns">
         <button class="k fn" data-fn="square">x²</button>
         <button class="k fn" data-fn="sqrt">√</button>
@@ -193,10 +207,15 @@ function paint(act,showInputs,R,frame){ctx.clearRect(0,0,CW,CH);
     ctx.globalCompositeOperation="lighter";ctx.drawImage(trailCanvas,0,0,trailCanvas.width/DPR(),trailCanvas.height/DPR());
   }
   // --- neurons: additive cached glow sprites (no per-neuron shadowBlur) ---
+  // when nociception fires, painI surges every neuron and floods them rose.
+  const pf=painI;
   ctx.globalCompositeOperation="lighter";
-  for(let i=0;i<N;i++){const a=act(i);if(a<0.02)continue;                 // skip near-dark neurons entirely
-    const p=PTS[i],g=GLOW[SIGN[i]>=0?0:1],rad=2.2+a*10;
-    ctx.globalAlpha=a<1?0.1+a*0.9:1;ctx.drawImage(g,p[0]-rad,p[1]-rad,rad*2,rad*2);}
+  for(let i=0;i<N;i++){let a=act(i);if(pf>0.01)a+=pf*(0.45+0.55*((i*97)%7)/7);   // the whole brain hurts at once
+    if(a<0.02)continue;const p=PTS[i],g=(pf>0.2)?GLOW[1]:GLOW[SIGN[i]>=0?0:1],rad=2.2+Math.min(1.4,a)*10;
+    ctx.globalAlpha=Math.min(1,0.1+a*0.9);ctx.drawImage(g,p[0]-rad,p[1]-rad,rad*2,rad*2);}
+  // red wash: subtle while armed, intense on an error flash
+  const wash=(PAIN?0.03:0)+0.16*pf;
+  if(wash>0){ctx.fillStyle=`rgba(255,50,80,${wash})`;ctx.fillRect(0,0,CW,CH);}
   ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";
   if(showInputs&&A.inputSets){ctx.strokeStyle="rgba(255,206,84,.75)";ctx.lineWidth=1.6;for(const set of A.inputSets)for(const n of set){const p=PTS[n];ctx.beginPath();ctx.arc(p[0],p[1],3.6,0,6.2832);ctx.stroke();}}}
 // idle "alive" state: a slow spatial shimmer, modulated by a lub-dub heartbeat so the whole brain pulses
@@ -220,10 +239,11 @@ function loop(ts){requestAnimationFrame(loop);
   if(paused)return;
   const minDt=1000/(A.R?40:30);if(ts-_last<minDt)return;_last=ts;
   clock++;
+  if(painI>0){painI*=0.9;if(painI<0.01){painI=0;staticDrawn=false;}}   // error flash decays away
   if(A.R){staticDrawn=false;const f=Math.min(A.frame,STEPS-1);paint(i=>Math.abs(A.R[f][i]),true,A.R,f);
     if(A.frame>=STEPS-1){const cb=A.onDone;A.onDone=null;A.R=null;if(cb)cb();}
     else{tc++;if(tc>=SPEED){tc=0;A.frame+=A.adv;}}}
-  else if(FX)paint(ambientAct,false,null,0);         // idle shimmer + heartbeat
+  else if(FX||painI>0||PAIN)paint(ambientAct,false,null,0);   // idle shimmer + heartbeat (kept live while pain is armed/flashing)
   else if(!staticDrawn){paint(calmAct,false,null,0);staticDrawn=true;}   // calm view: draw once, then hold
 }
 function lastR(){return _lastR;}
@@ -317,11 +337,30 @@ function showCheck(){const el=$("chkval");if(!CHK){el.textContent="off";return;}
                  :`should be ${trueStr} <span class="bad">✗</span> <small>(fly said ${flyStr})</small>`;}
 function checkExpr(problem,flyV){const t=trueExprVal(problem);if(t===null)return;
   const flyN=BigInt(Math.round(flyV)),ok=flyN===t;
-  lastCheck={trueStr:t.toString(),ok,flyStr:String(Math.round(flyV))};showCheck();}
+  lastCheck={trueStr:t.toString(),ok,flyStr:String(Math.round(flyV))};showCheck();painReact();}
 function checkUnary(name,problem,flyR){const op=OPS[name],ti=trueExprVal(problem);if(ti===null)return;
   const tv=roundDec(FNJS[name](Number(ti)),op.dec),flyN=+flyR,tol=Math.pow(10,-op.dec)/2+1e-9;
   const ok=isFinite(tv)&&Math.abs(tv-flyN)<=tol,ts=isFinite(tv)?(op.dec>0?tv.toFixed(op.dec):String(Math.round(tv))):"—";
-  lastCheck={trueStr:ts,ok,flyStr:fmt(op,flyR)};showCheck();}
+  lastCheck={trueStr:ts,ok,flyStr:fmt(op,flyR)};showCheck();painReact();}
+
+// ---------- secret: nociception ("pain") mode ----------
+// Hidden behind a gesture. When armed, a wrong answer fires the whole brain's
+// error signal — a hard red flash + shudder. This DRAMATISES the negative-reward
+// signal that drives learning during training (a bigger penalty = a stronger
+// gradient); the live page runs the already-trained brain, so it shows the
+// signal rather than retraining the weights in the browser.
+let PAIN=false,painI=0,_flyClicks=[];
+function toast(msg,ms){const t=$("toast");t.innerHTML=msg;t.classList.add("show");
+  clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),ms||5200);}
+function setPain(on){PAIN=on;$("painbtn").classList.toggle("on",on);
+  if(on){$("step").innerHTML=`nociception <b>armed</b>`;
+    toast("🔥 <b>Nociception online.</b><br>Every wrong answer now fires the brain's error signal — a hard penalty. In real training this is the negative-reward signal that drives learning: a bigger penalty means a stronger gradient. The live page runs the already-trained brain, so this shows the signal rather than retraining it.");}
+  else{painI=0;staticDrawn=false;toast("nociception off",1400);}}
+function revealPain(){$("painbtn").classList.add("show");setPain(true);}
+function hurt(){painI=1;const bb=document.querySelector(".brainbox");
+  bb.classList.remove("hurt");void bb.offsetWidth;bb.classList.add("hurt");   // restart the shudder
+  $("step").innerHTML=`⚡ <b>error signal</b> — nociceptors firing`;}
+function painReact(){if(PAIN&&lastCheck&&!lastCheck.ok)hurt();}
 
 // evaluate an RPN stream, driving the fly for each operation (composed if big)
 async function evalExpr(){
@@ -370,6 +409,11 @@ $("fx").addEventListener("change",e=>{FX=e.target.checked;staticDrawn=false;});
 try{CHK=localStorage.getItem("mathfly_chk")==="1";}catch(e){}
 $("chk").checked=CHK;showCheck();
 $("chk").addEventListener("change",e=>{CHK=e.target.checked;try{localStorage.setItem("mathfly_chk",CHK?"1":"0");}catch(err){}showCheck();});
+// secret gesture: tap the 🪰 logo 4x within 1.5s to unlock/toggle nociception
+document.querySelector(".brand .fly").addEventListener("click",()=>{const now=Date.now();
+  _flyClicks.push(now);_flyClicks=_flyClicks.filter(t=>now-t<1500);
+  if(_flyClicks.length>=4){_flyClicks=[];$("painbtn").classList.contains("show")?setPain(!PAIN):revealPain();}});
+$("painbtn").addEventListener("click",()=>setPain(!PAIN));
 $("realtag").textContent=M.source.includes("real")?"REAL male-CNS connectome":M.source;
 $("foot").innerHTML=`<span class="pill">${N.toLocaleString()} real neurons</span><span class="pill">${M.n_synapses.toLocaleString()} synapses</span>`+
   `<span class="pill">${M.movement_neurons} motor neurons</span><span class="pill">real anatomy</span><br>`+
