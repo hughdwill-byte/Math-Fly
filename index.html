@@ -111,8 +111,9 @@
         <button class="k" data-d="7">7</button><button class="k" data-d="8">8</button><button class="k" data-d="9">9</button><button class="k op" data-tok="÷">÷</button>
         <button class="k" data-d="4">4</button><button class="k" data-d="5">5</button><button class="k" data-d="6">6</button><button class="k op" data-tok="×">×</button>
         <button class="k" data-d="1">1</button><button class="k" data-d="2">2</button><button class="k" data-d="3">3</button><button class="k op" data-tok="−">−</button>
-        <button class="k clr" id="clr">C</button><button class="k" data-d="0">0</button><button class="k eq" id="eq">=</button><button class="k op" data-tok="+">+</button>
+        <button class="k clr" id="clr">C</button><button class="k" data-d="0">0</button><button class="k" data-tok=".">.</button><button class="k op" data-tok="+">+</button>
       </div>
+      <button class="k eq" id="eq" style="width:100%">=</button>
       <div class="move">
         <h3>Basic movement (real motor neurons)</h3>
         <div class="movegrid">
@@ -262,7 +263,7 @@ try{new IntersectionObserver(es=>{_onscr=es[0].isIntersecting;updPause();},{thre
 // ---------- expression parsing (shunting-yard, precedence) ----------
 function tokenize(str){str=str.replace(/[−]/g,"-").replace(/[×]/g,"*").replace(/[÷]/g,"/");const t=[];let i=0;
   while(i<str.length){const c=str[i];
-    if(c>="0"&&c<="9"){let n="";while(i<str.length&&str[i]>="0"&&str[i]<="9")n+=str[i++];t.push({t:"num",v:+n});}
+    if((c>="0"&&c<="9")||c==="."){let n="";while(i<str.length&&((str[i]>="0"&&str[i]<="9")||str[i]==="."))n+=str[i++];t.push({t:"num",v:parseFloat(n)||0});}
     else if("+-*/".includes(c)){t.push({t:"op",v:c});i++;}
     else if(c==="("||c===")"){t.push({t:c});i++;}else i++;}return t;}
 const PREC={"+":1,"-":1,"*":2,"/":2};
@@ -295,14 +296,14 @@ function flyUn(name,a){return new Promise(res=>{const op=OPS[name];const A2=clam
 function setStage(s){$("step").innerHTML=s;}
 async function addBig(x,y){x=Math.round(x);y=Math.round(y);
   if(x<=999&&y<=999)return await flyBin("add",x,y);
-  let carry=0,res=0,place=1;
-  while(x>0||y>0){const s=await flyBin("add",x%1000,y%1000,true);const t=s+carry;res+=(t%1000)*place;carry=Math.floor(t/1000);place*=1000;x=Math.floor(x/1000);y=Math.floor(y/1000);}
+  let carry=0,res=0,place=1;   // base-100 limbs keep every fly operand a small, in-range 2-digit number
+  while(x>0||y>0){const s=await flyBin("add",x%100,y%100,true);const t=s+carry;res+=(t%100)*place;carry=Math.floor(t/100);place*=100;x=Math.floor(x/100);y=Math.floor(y/100);}
   return res+carry*place;}
 async function subBig(x,y){x=Math.round(x);y=Math.round(y);
   if(x<y)return -(await subBig(y,x));
   if(x<=999&&y<=999)return await flyBin("sub",x,y);
-  let borrow=0,res=0,place=1;
-  while(x>0||y>0){let a=x%1000-borrow,b=y%1000;if(a<b){a+=1000;borrow=1;}else borrow=0;const d=await flyBin("sub",a,b,true);res+=d*place;place*=1000;x=Math.floor(x/1000);y=Math.floor(y/1000);}
+  let borrow=0,res=0,place=1;   // base-100 limbs: a borrow gives 0..199 − 0..99, never past the fly's range
+  while(x>0||y>0){let a=x%100-borrow,b=y%100;if(a<b){a+=100;borrow=1;}else borrow=0;const d=await flyBin("sub",a,b,true);res+=d*place;place*=100;x=Math.floor(x/100);y=Math.floor(y/100);}
   return res;}
 async function mulBig(a,b){a=Math.round(a);b=Math.round(b);
   if(a<=99&&b<=99)return await flyBin("mul",a,b);
@@ -315,25 +316,54 @@ async function divBig(a,b){a=Math.round(a);b=Math.round(b);if(b===0)return 0;
   if(a<=99&&b<=99)return await flyBin("div",a,b);
   const ds=String(a).split("");let rem=0,q="";
   for(const ch of ds){rem=rem*10+(+ch);let qd=0;
-    while(rem>=b&&qd<9){rem=await subBig(rem,b);qd++;}   // subtract b (fly) while it fits
+    if(rem<=99&&b<=99){qd=await flyBin("div",rem,b);rem-=qd*b;}   // fly's native division gives the digit in one 100% step
+    else{while(rem>=b&&qd<9){rem=await subBig(rem,b);qd++;}}       // wider divisors fall back to repeated fly subtraction
     q+=qd;}
   return parseInt(q)||0;}
-async function flyApply(name,a,b){const op=OPS[name];
-  if(name==="add")return await addBig(a,b);
-  if(name==="sub")return await subBig(a,b);
-  if(name==="mul")return await mulBig(a,b);
-  if(name==="div")return await divBig(a,b);
+// signed integer ops built on the fly's non-negative big primitives
+async function signedAdd(A,B){const sa=A<0?-1:1,a=Math.abs(A),b=Math.abs(B);
+  return sa===(B<0?-1:1)?sa*(await addBig(a,b)):sa*(await subBig(a,b));}
+// decimal-aware apply: + − × stay exact integers when both inputs are whole; anything
+// with a decimal (and every ÷) is composed in fixed-point hundredths to 2 dp — the ×100
+// scaling is pure bookkeeping, the fly still does every real integer add/sub/mul/div.
+async function flyApply(name,a,b){
+  if(name==="div"){if(b===0)return 0;const s=(a<0)!==(b<0)?-1:1,A=Math.abs(a),B=Math.abs(b);
+    let Num,Den;if(Number.isInteger(B)){Num=Math.round(A*1000);Den=Math.round(B);}else{Num=Math.round(A*100)*1000;Den=Math.round(B*100);}
+    const T=await divBig(Num,Den);return s*Math.round(T/10)/100;}   // one extra digit, then round to 2 dp
+  if(Number.isInteger(a)&&Number.isInteger(b)){
+    if(name==="add")return await signedAdd(a,b);
+    if(name==="sub")return await signedAdd(a,-b);
+    if(name==="mul"){const s=(a<0)!==(b<0)?-1:1;return s*(await mulBig(Math.abs(a),Math.abs(b)));}}
+  const A=Math.round(a*100),B=Math.round(b*100);   // fixed-point hundredths
+  if(name==="add")return (await signedAdd(A,B))/100;
+  if(name==="sub")return (await signedAdd(A,-B))/100;
+  if(name==="mul"){const s=(A<0)!==(B<0)?-1:1;const P=await mulBig(Math.abs(A),Math.abs(B));return s*Math.round(P/100)/100;}
   return await flyUn(name,a);}
 
 // ---------- the "checker": an ordinary calculator that verifies the fly ----------
 // Ground-truth arithmetic done with BigInt so it is always exact (÷ is floor division,
 // matching the fly's integer division). Toggled on/off; state remembered per viewer.
 let CHK=false,lastCheck=null;
-function bdiv(a,b){if(b===0n)return 0n;let q=a/b;if(a%b!==0n&&((a<0n)!==(b<0n)))q-=1n;return q;}
-function trueExprVal(expr){try{const rpn=toRPN(tokenize(expr)),st=[];
-  for(const k of rpn){if(k.t==="num"){st.push(BigInt(Math.round(k.v)));continue;}
-    const b=st.pop(),a=st.pop();st.push(k.v==="+"?a+b:k.v==="-"?a-b:k.v==="*"?a*b:bdiv(a,b));}
-  return st.length?st[st.length-1]:0n;}catch(e){return null;}}
+// format a value to at most 2 dp, trimming trailing zeros (12 -> "12", 3.5 -> "3.5", 3.14 -> "3.14")
+function fmtDec(x){if(!isFinite(x))return "—";if(Number.isInteger(x))return String(x);
+  return (Math.round(x*100)/100).toFixed(2).replace(/0+$/,"").replace(/\.$/,"");}
+// reference arithmetic: an EXACT mirror of the fly's composition (whole-number when both
+// inputs are integers, fixed-point 2 dp otherwise, ÷ always 2 dp), so the checker only
+// ever flags a genuine fly error, not a rounding difference in the method.
+function refOp(name,a,b){
+  if(name==="div"){if(b===0)return 0;const s=(a<0)!==(b<0)?-1:1,A=Math.abs(a),B=Math.abs(b);
+    let Num,Den;if(Number.isInteger(B)){Num=Math.round(A*1000);Den=Math.round(B);}else{Num=Math.round(A*100)*1000;Den=Math.round(B*100);}
+    return s*Math.round(Math.floor(Num/Den)/10)/100;}
+  if(Number.isInteger(a)&&Number.isInteger(b)){
+    if(name==="add")return a+b;if(name==="sub")return a-b;if(name==="mul")return a*b;}
+  const A=Math.round(a*100),B=Math.round(b*100);
+  if(name==="add")return (A+B)/100;
+  if(name==="sub")return (A-B)/100;
+  const s=(A<0)!==(B<0)?-1:1;return s*Math.round(Math.abs(A)*Math.abs(B)/100)/100;}
+function refEval(expr){try{const rpn=toRPN(tokenize(expr)),st=[];
+  for(const k of rpn){if(k.t==="num"){st.push(k.v);continue;}
+    const b=st.pop(),a=st.pop();st.push(refOp(SYM2NAME[k.v],a,b));}
+  return st.length?st[st.length-1]:0;}catch(e){return null;}}
 const FNJS={square:a=>a*a,sqrt:a=>Math.sqrt(a),sin:a=>Math.sin(a*Math.PI/180),
   cos:a=>Math.cos(a*Math.PI/180),log:a=>Math.log10(a),inv:a=>1/a};
 function roundDec(x,d){const p=Math.pow(10,d);return Math.round(x*p)/p;}
@@ -342,11 +372,11 @@ function showCheck(){const el=$("chkval");if(!CHK){el.textContent="off";return;}
   const {trueStr,ok,flyStr}=lastCheck;
   el.innerHTML=ok?`= ${trueStr} <span class="ok">✓ correct</span>`
                  :`should be ${trueStr} <span class="bad">✗</span> <small>(fly said ${flyStr})</small>`;}
-function checkExpr(problem,flyV){const t=trueExprVal(problem);if(t===null)return;
-  const flyN=BigInt(Math.round(flyV)),ok=flyN===t;
-  lastCheck={trueStr:t.toString(),ok,flyStr:String(Math.round(flyV))};showCheck();painReact();}
-function checkUnary(name,problem,flyR){const op=OPS[name],ti=trueExprVal(problem);if(ti===null)return;
-  const tv=roundDec(FNJS[name](Number(ti)),op.dec),flyN=+flyR,tol=Math.pow(10,-op.dec)/2+1e-9;
+function checkExpr(problem,flyV){const t=refEval(problem);if(t===null)return;
+  const ok=Math.abs(flyV-t)<1e-9;
+  lastCheck={trueStr:fmtDec(t),ok,flyStr:fmtDec(flyV)};showCheck();painReact();}
+function checkUnary(name,aInt,flyR){const op=OPS[name];
+  const tv=roundDec(FNJS[name](aInt),op.dec),flyN=+flyR,tol=Math.pow(10,-op.dec)/2+1e-9;
   const ok=isFinite(tv)&&Math.abs(tv-flyN)<=tol,ts=isFinite(tv)?(op.dec>0?tv.toFixed(op.dec):String(Math.round(tv))):"—";
   lastCheck={trueStr:ts,ok,flyStr:fmt(op,flyR)};showCheck();painReact();}
 
@@ -375,28 +405,31 @@ async function evalExpr(){
   for(const k of rpn){
     if(k.t==="num"){st.push(k.v);continue;}
     const name=SYM2NAME[k.v],op=OPS[name];const b=st.pop(),a=st.pop();
-    const big=(a>op.a[1]||b>op.b[1]);
-    setDisp(curExpr,"…",accLine(name,big?null:Math.max(a,b))+(big?" · long "+({mul:"multiplication",div:"division",add:"addition",sub:"subtraction"}[name]):""));
+    const dec=name==="div"||!(Number.isInteger(a)&&Number.isInteger(b));
+    const opname={mul:"multiplication",div:"division",add:"addition",sub:"subtraction"}[name];
+    const big=Math.max(Math.abs(a),Math.abs(b))*(dec?100:1)>op.a[1];
+    setDisp(curExpr,"…",accLine(name)+(big?` · long ${opname}`:"")+(dec&&name!=="div"?" · decimals ×100":""));
     const v=await flyApply(name,a,b);
-    st.push(v);setDisp(curExpr,String(Math.round(v)));$("step").innerHTML=`${a} ${op.sym} ${b} = <b>${Math.round(v)}</b>`;
+    st.push(v);setDisp(curExpr,fmtDec(v));$("step").innerHTML=`${fmtDec(a)} ${op.sym} ${fmtDec(b)} = <b>${fmtDec(v)}</b>`;
   }
   return st.length?st[st.length-1]:0;}
 
 async function evaluate(){if(busy)return;if(!curExpr.trim())return;busy=true;
   const problem=curExpr;   // snapshot before curExpr is overwritten with the result
   document.querySelectorAll(".movebtn").forEach(x=>x.classList.remove("on"));$("movestat").textContent="";
-  const v=await evalExpr();busy=false;const shown=Number.isInteger(v)?v:(+v).toFixed(3);curExpr=String(Math.round(v));
+  const v=await evalExpr();busy=false;const shown=fmtDec(v);curExpr=shown;
   $("ans").textContent=shown;$("step").innerHTML=`answer <b>${shown}</b>`;checkExpr(problem,v);}
 async function applyFn(name){if(busy)return;const op=OPS[name];if(!curExpr.trim())return;busy=true;
-  const problem=curExpr;   // snapshot the inner expression for the checker
-  const v=await evalExpr();const a=clampToOp(op,v);setDisp(`${op.sym}(${Math.round(v)})`,"…",accLine(name,v));
+  const v=await evalExpr();const a=clampToOp(op,Math.round(v));setDisp(`${op.sym}(${fmtDec(v)})`,"…",accLine(name));
   const r=await flyUn(name,a);busy=false;curExpr=fmt(op,r);
-  setDisp(`${op.sym}(${Math.round(v)})`,fmt(op,r),accLine(name));$("step").innerHTML=`answer <b>${fmt(op,r)}</b>`;checkUnary(name,problem,r);}
+  setDisp(`${op.sym}(${fmtDec(v)})`,fmt(op,r),accLine(name));$("step").innerHTML=`answer <b>${fmt(op,r)}</b>`;checkUnary(name,a,r);}
 function doMove(c){if(busy)return;busy=true;document.querySelectorAll(".movebtn").forEach(x=>x.classList.toggle("on",+x.dataset.c===c));
   runAnim(dyn(drive([CMDS[c]])),null,'nerve cord: <b>motor neurons firing</b>',()=>{const f=feat(lastR(),MOTOR,STEPS-1);
     let bi=0,bv=-1e9;const o=mvec(B.movement.W_move,f);for(let i=0;i<o.length;i++)if(o[i]>bv){bv=o[i];bi=i;}
     busy=false;$("movestat").innerHTML=`motor output → <b>${B.movement.commands[bi]}</b> ✓`;$("step").innerHTML=`moved <b>${B.movement.commands[bi]}</b>`;});}
-function press(s){if(busy)return;if(lastCheck){lastCheck=null;showCheck();}curExpr+=s;setDisp(curExpr);}
+function press(s){if(busy)return;if(lastCheck){lastCheck=null;showCheck();}
+  if(s==="."){const tail=curExpr.split(/[+\-−×÷*/()]/).pop();if(tail.indexOf(".")>=0)return;if(tail==="")curExpr+="0";}   // one dot per number; lead with 0
+  curExpr+=s;setDisp(curExpr);}
 
 document.querySelectorAll("[data-d]").forEach(b=>b.addEventListener("click",()=>press(b.dataset.d)));
 document.querySelectorAll("[data-tok]").forEach(b=>b.addEventListener("click",()=>press(b.dataset.tok)));
@@ -404,7 +437,7 @@ document.querySelectorAll("[data-fn]").forEach(b=>b.addEventListener("click",()=
 document.querySelectorAll(".movebtn").forEach(b=>b.addEventListener("click",()=>doMove(+b.dataset.c)));
 $("eq").addEventListener("click",evaluate);
 $("clr").addEventListener("click",()=>{if(busy)return;curExpr="";setDisp("",0,"");$("step").textContent="ready";lastCheck=null;showCheck();});
-addEventListener("keydown",e=>{if(e.key>="0"&&e.key<="9")press(e.key);else if("+-*/()".includes(e.key))press(e.key);
+addEventListener("keydown",e=>{if((e.key>="0"&&e.key<="9")||e.key===".")press(e.key);else if("+-*/()".includes(e.key))press(e.key);
   else if(e.key==="Enter"||e.key==="=")evaluate();else if(e.key==="c"||e.key==="Escape")$("clr").click();
   else if(e.key==="Backspace"){if(!busy){curExpr=curExpr.slice(0,-1);setDisp(curExpr);}}});
 addEventListener("resize",()=>{layout();staticDrawn=false;});

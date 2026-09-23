@@ -77,8 +77,16 @@ bookkeeping). So `471 × 380`, `998001 ÷ 999`, etc. are computed step by step b
 the real fly. Big results **compound the per-step accuracy** (≈85–90% end-to-end
 on 3-digit ×), which the UI states plainly — no faking.
 
+**Decimals (2 dp):** the calculator has a `.` key and evaluates decimals to
+two places. The fly only knows whole numbers, so decimals use the same
+fly-as-ALU trick as big numbers — operands are held in **fixed-point
+hundredths** (×100), the fly does every real integer add/sub/mul/div, and the
+decimal point is put back afterwards (`3.14 + 2.5 = 5.64`, `7 ÷ 2 = 3.5`,
+`1 ÷ 3 = 0.33`). Whole-number `+ − ×` still run directly as before; every `÷`
+now returns 2 dp.
+
 Turn on the **✓ checker** (a toggle in the calculator) and an ordinary
-BigInt calculator runs alongside the fly, showing the exact answer and a ✓/✗
+calculator runs alongside the fly, showing the exact answer and a ✓/✗
 for whether the fly matched — so you can see for yourself when the little
 brain is right and when a long-arithmetic solve drifts.
 
