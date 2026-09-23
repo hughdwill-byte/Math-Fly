@@ -77,6 +77,11 @@ bookkeeping). So `471 × 380`, `998001 ÷ 999`, etc. are computed step by step b
 the real fly. Big results **compound the per-step accuracy** (≈85–90% end-to-end
 on 3-digit ×), which the UI states plainly — no faking.
 
+Turn on the **✓ checker** (a toggle in the calculator) and an ordinary
+BigInt calculator runs alongside the fly, showing the exact answer and a ✓/✗
+for whether the fly matched — so you can see for yourself when the little
+brain is right and when a long-arithmetic solve drifts.
+
 The honest design, all measured not assumed: **`+ −` genuinely generalise** to
 three digits (~98% held-out), so they reach 0–999; **`× ÷` can't**, so their
 *direct* range is 0–99 and larger inputs go through the long-arithmetic

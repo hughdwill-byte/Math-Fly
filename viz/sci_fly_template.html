@@ -31,6 +31,12 @@
   .expr{font-family:var(--mono);font-size:16px;color:var(--ink);min-height:22px;overflow-x:auto;white-space:nowrap;}
   .ans{font-family:var(--mono);font-size:34px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1.1;overflow:hidden;text-overflow:ellipsis;text-shadow:0 0 18px rgba(255,206,84,.3);}
   .accline{font-size:10px;color:var(--faint);text-align:right;min-height:14px;}
+  .chkrow{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;cursor:pointer;user-select:none;
+    border:1px solid var(--line);border-radius:10px;padding:7px 10px;background:#070d18;}
+  .chkrow input{accent-color:var(--good);cursor:pointer;margin:0;}
+  .chklab{color:var(--faint);letter-spacing:.02em;}
+  .chkval{margin-left:auto;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);}
+  .chkval .ok{color:var(--good);font-weight:700;}.chkval .bad{color:var(--bad);font-weight:700;}.chkval small{color:var(--faint);font-weight:400;}
   .keys{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;}
   .fns{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;}
   button.k{height:44px;border:1px solid var(--line);border-radius:11px;background:var(--key);color:var(--ink);font-family:var(--mono);font-size:17px;cursor:pointer;user-select:none;}
@@ -75,6 +81,8 @@
         <div class="ans" id="ans">0</div>
       </div>
       <div class="accline" id="acc">&nbsp;</div>
+      <label class="chkrow" title="Turn on an ordinary calculator that independently checks whether the fly's answer is correct">
+        <input type="checkbox" id="chk"><span class="chklab">✓ checker</span><span class="chkval" id="chkval">off</span></label>
       <div class="fns">
         <button class="k fn" data-fn="square">x²</button>
         <button class="k fn" data-fn="sqrt">√</button>
@@ -290,6 +298,31 @@ async function flyApply(name,a,b){const op=OPS[name];
   if(name==="div")return await divBig(a,b);
   return await flyUn(name,a);}
 
+// ---------- the "checker": an ordinary calculator that verifies the fly ----------
+// Ground-truth arithmetic done with BigInt so it is always exact (÷ is floor division,
+// matching the fly's integer division). Toggled on/off; state remembered per viewer.
+let CHK=false,lastCheck=null;
+function bdiv(a,b){if(b===0n)return 0n;let q=a/b;if(a%b!==0n&&((a<0n)!==(b<0n)))q-=1n;return q;}
+function trueExprVal(expr){try{const rpn=toRPN(tokenize(expr)),st=[];
+  for(const k of rpn){if(k.t==="num"){st.push(BigInt(Math.round(k.v)));continue;}
+    const b=st.pop(),a=st.pop();st.push(k.v==="+"?a+b:k.v==="-"?a-b:k.v==="*"?a*b:bdiv(a,b));}
+  return st.length?st[st.length-1]:0n;}catch(e){return null;}}
+const FNJS={square:a=>a*a,sqrt:a=>Math.sqrt(a),sin:a=>Math.sin(a*Math.PI/180),
+  cos:a=>Math.cos(a*Math.PI/180),log:a=>Math.log10(a),inv:a=>1/a};
+function roundDec(x,d){const p=Math.pow(10,d);return Math.round(x*p)/p;}
+function showCheck(){const el=$("chkval");if(!CHK){el.textContent="off";return;}
+  if(!lastCheck){el.textContent="on — waiting for a calculation";return;}
+  const {trueStr,ok,flyStr}=lastCheck;
+  el.innerHTML=ok?`= ${trueStr} <span class="ok">✓ correct</span>`
+                 :`should be ${trueStr} <span class="bad">✗</span> <small>(fly said ${flyStr})</small>`;}
+function checkExpr(problem,flyV){const t=trueExprVal(problem);if(t===null)return;
+  const flyN=BigInt(Math.round(flyV)),ok=flyN===t;
+  lastCheck={trueStr:t.toString(),ok,flyStr:String(Math.round(flyV))};showCheck();}
+function checkUnary(name,problem,flyR){const op=OPS[name],ti=trueExprVal(problem);if(ti===null)return;
+  const tv=roundDec(FNJS[name](Number(ti)),op.dec),flyN=+flyR,tol=Math.pow(10,-op.dec)/2+1e-9;
+  const ok=isFinite(tv)&&Math.abs(tv-flyN)<=tol,ts=isFinite(tv)?(op.dec>0?tv.toFixed(op.dec):String(Math.round(tv))):"—";
+  lastCheck={trueStr:ts,ok,flyStr:fmt(op,flyR)};showCheck();}
+
 // evaluate an RPN stream, driving the fly for each operation (composed if big)
 async function evalExpr(){
   const rpn=toRPN(tokenize(curExpr));const st=[];
@@ -304,25 +337,27 @@ async function evalExpr(){
   return st.length?st[st.length-1]:0;}
 
 async function evaluate(){if(busy)return;if(!curExpr.trim())return;busy=true;
+  const problem=curExpr;   // snapshot before curExpr is overwritten with the result
   document.querySelectorAll(".movebtn").forEach(x=>x.classList.remove("on"));$("movestat").textContent="";
   const v=await evalExpr();busy=false;const shown=Number.isInteger(v)?v:(+v).toFixed(3);curExpr=String(Math.round(v));
-  $("ans").textContent=shown;$("step").innerHTML=`answer <b>${shown}</b>`;}
+  $("ans").textContent=shown;$("step").innerHTML=`answer <b>${shown}</b>`;checkExpr(problem,v);}
 async function applyFn(name){if(busy)return;const op=OPS[name];if(!curExpr.trim())return;busy=true;
+  const problem=curExpr;   // snapshot the inner expression for the checker
   const v=await evalExpr();const a=clampToOp(op,v);setDisp(`${op.sym}(${Math.round(v)})`,"…",accLine(name,v));
   const r=await flyUn(name,a);busy=false;curExpr=fmt(op,r);
-  setDisp(`${op.sym}(${Math.round(v)})`,fmt(op,r),accLine(name));$("step").innerHTML=`answer <b>${fmt(op,r)}</b>`;}
+  setDisp(`${op.sym}(${Math.round(v)})`,fmt(op,r),accLine(name));$("step").innerHTML=`answer <b>${fmt(op,r)}</b>`;checkUnary(name,problem,r);}
 function doMove(c){if(busy)return;busy=true;document.querySelectorAll(".movebtn").forEach(x=>x.classList.toggle("on",+x.dataset.c===c));
   runAnim(dyn(drive([CMDS[c]])),null,'nerve cord: <b>motor neurons firing</b>',()=>{const f=feat(lastR(),MOTOR,STEPS-1);
     let bi=0,bv=-1e9;const o=mvec(B.movement.W_move,f);for(let i=0;i<o.length;i++)if(o[i]>bv){bv=o[i];bi=i;}
     busy=false;$("movestat").innerHTML=`motor output → <b>${B.movement.commands[bi]}</b> ✓`;$("step").innerHTML=`moved <b>${B.movement.commands[bi]}</b>`;});}
-function press(s){if(busy)return;curExpr+=s;setDisp(curExpr);}
+function press(s){if(busy)return;if(lastCheck){lastCheck=null;showCheck();}curExpr+=s;setDisp(curExpr);}
 
 document.querySelectorAll("[data-d]").forEach(b=>b.addEventListener("click",()=>press(b.dataset.d)));
 document.querySelectorAll("[data-tok]").forEach(b=>b.addEventListener("click",()=>press(b.dataset.tok)));
 document.querySelectorAll("[data-fn]").forEach(b=>b.addEventListener("click",()=>applyFn(b.dataset.fn)));
 document.querySelectorAll(".movebtn").forEach(b=>b.addEventListener("click",()=>doMove(+b.dataset.c)));
 $("eq").addEventListener("click",evaluate);
-$("clr").addEventListener("click",()=>{if(busy)return;curExpr="";setDisp("",0,"");$("step").textContent="ready";});
+$("clr").addEventListener("click",()=>{if(busy)return;curExpr="";setDisp("",0,"");$("step").textContent="ready";lastCheck=null;showCheck();});
 addEventListener("keydown",e=>{if(e.key>="0"&&e.key<="9")press(e.key);else if("+-*/()".includes(e.key))press(e.key);
   else if(e.key==="Enter"||e.key==="=")evaluate();else if(e.key==="c"||e.key==="Escape")$("clr").click();
   else if(e.key==="Backspace"){if(!busy){curExpr=curExpr.slice(0,-1);setDisp(curExpr);}}});
@@ -331,10 +366,14 @@ addEventListener("resize",()=>{layout();staticDrawn=false;});
 const reduced=matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches;
 FX=!reduced;$("fx").checked=FX;
 $("fx").addEventListener("change",e=>{FX=e.target.checked;staticDrawn=false;});
+// checker on/off — an ordinary calculator that verifies the fly; remembered per viewer
+try{CHK=localStorage.getItem("mathfly_chk")==="1";}catch(e){}
+$("chk").checked=CHK;showCheck();
+$("chk").addEventListener("change",e=>{CHK=e.target.checked;try{localStorage.setItem("mathfly_chk",CHK?"1":"0");}catch(err){}showCheck();});
 $("realtag").textContent=M.source.includes("real")?"REAL male-CNS connectome":M.source;
 $("foot").innerHTML=`<span class="pill">${N.toLocaleString()} real neurons</span><span class="pill">${M.n_synapses.toLocaleString()} synapses</span>`+
   `<span class="pill">${M.movement_neurons} motor neurons</span><span class="pill">real anatomy</span><br>`+
-  `<b>How it works:</b> the layout is the fly's real anatomy from soma coordinates — brain up top, ventral nerve cord below. Type an expression like <b>2 + 3 × 4</b>; a precedence parser breaks it into elementary steps and the fly computes each one, its neurons firing per step. The fly is exact at small operations (+ − to 999, × ÷ and functions to 99); for <b>bigger × and ÷</b> the calculator does long multiplication / division, with the fly doing every partial product, addition and subtraction — so big results compound the fly's per-step accuracy. Movement fires the real motor neurons in the nerve cord.`;
+  `<b>How it works:</b> the layout is the fly's real anatomy from soma coordinates — brain up top, ventral nerve cord below. Type an expression like <b>2 + 3 × 4</b>; a precedence parser breaks it into elementary steps and the fly computes each one, its neurons firing per step. The fly is exact at small operations (+ − to 999, × ÷ and functions to 99); for <b>bigger × and ÷</b> the calculator does long multiplication / division, with the fly doing every partial product, addition and subtraction — so big results compound the fly's per-step accuracy. Turn on the <b>✓ checker</b> to run an ordinary calculator alongside the fly and see, every time, whether the fly's answer is right. Movement fires the real motor neurons in the nerve cord.`;
 layout();pickSparks();requestAnimationFrame(loop);   // brain is always alive (idle shimmer + firing)
 curExpr="2+3×4";setDisp("2 + 3 × 4",0);setTimeout(evaluate,900);  // let the idle shimmer show first, then compute
 </script>
