@@ -9,9 +9,8 @@ small readout (or, optionally, the synaptic gains themselves) to turn the fly's
 circuitry into a calculator, and watch how far its capacity goes.
 
 **▶ Live demo:** <https://hughdwill-byte.github.io/Math-Fly/> — the real fly, in
-its true anatomy, working as a scientific calculator. *(One-time setup by the
-repo owner: Settings → Pages → Source → either "GitHub Actions", or "Deploy from
-a branch" → this branch → `/docs`. Then it's live at that URL.)*
+its true anatomy, working as a scientific calculator. It is deployed automatically
+by `.github/workflows/pages.yml`.
 
 > **Read this first — what this is and isn't.** The connectome is a *wiring
 > diagram*, not a living, thinking brain. It contains no recorded activity and
@@ -89,6 +88,9 @@ Turn on the **✓ checker** (a toggle in the calculator) and an ordinary
 calculator runs alongside the fly, showing the exact answer and a ✓/✗
 for whether the fly matched — so you can see for yourself when the little
 brain is right and when a long-arithmetic solve drifts.
+An **effects** toggle turns the neural animation down, and it is off by default when
+reduced motion is requested. The animation also idles to sleep, so the page stays light on
+CPU and GPU.
 
 The honest design, all measured not assumed: **`+ −` genuinely generalise** to
 three digits (~98% held-out), so they reach 0–999; **`× ÷` can't**, so their
@@ -232,7 +234,7 @@ index.html                 the calculator, served at the GitHub Pages site root
 docs/index.html            same page, for Pages set to the /docs folder
 .github/workflows/pages.yml   auto-deploys to GitHub Pages
 configs/           quickstart, full_connectome, digits, bptt, rl (.yaml)
-tests/             pytest smoke tests (9, all green)
+tests/             pytest smoke tests
 GUIDE.md           ← full training guide (start here)
 ```
 
@@ -240,7 +242,11 @@ GUIDE.md           ← full training guide (start here)
 
 - Python ≥ 3.10, `numpy`, `scipy`, `pyyaml` (core).
 - Optional `torch` for BPTT: `pip install torch --index-url https://download.pytorch.org/whl/cpu`
-- Optional `neuprint-python` + `pandas` to pull the real connectome.
+- Optional `pyarrow` + `pandas` to pull the real connectome (or `neuprint-python` for the
+  token-based route).
+- Optional `gymnasium` for `--mode rl`, and `Pillow` for `render_gif`.
+
+Run the tests with `python -m pytest`.
 
 See [`GUIDE.md`](GUIDE.md) for the step-by-step training guide, how far the math
 can realistically go, and how to push the capacity.
